@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- Background gradient -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#16213e"/>
+    </linearGradient>
+    <!-- Blue-purple accent gradient -->
+    <linearGradient id="accentGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4facfe"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+    <!-- Glow gradient for the transformation arc -->
+    <linearGradient id="arcGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4facfe"/>
+      <stop offset="50%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+    <!-- Subtle inner glow -->
+    <radialGradient id="glowCenter" cx="0.5" cy="0.45" r="0.5">
+      <stop offset="0%" stop-color="#7c3aed" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="transparent" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Circuit node glow -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect x="32" y="32" width="960" height="960" rx="200" ry="200" fill="url(#bgGrad)"/>
+  <!-- Inner ambient glow -->
+  <rect x="32" y="32" width="960" height="960" rx="200" ry="200" fill="url(#glowCenter)"/>
+
+  <!-- === LEFT SIDE: AI / Robot head (circuit-style) === -->
+  <g opacity="0.95">
+    <!-- Robot head outline - geometric/angular -->
+    <rect x="220" y="280" width="220" height="260" rx="30" ry="30"
+          fill="none" stroke="url(#accentGrad)" stroke-width="5"/>
+    <!-- Robot antenna -->
+    <line x1="330" y1="280" x2="330" y2="230" stroke="#4facfe" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="330" cy="218" r="12" fill="#4facfe" filter="url(#glow)"/>
+    <!-- Robot eyes - digital/square -->
+    <rect x="264" y="340" width="40" height="28" rx="6" fill="#4facfe" opacity="0.9"/>
+    <rect x="356" y="340" width="40" height="28" rx="6" fill="#4facfe" opacity="0.9"/>
+    <!-- Pixel pupils -->
+    <rect x="278" y="348" width="12" height="12" rx="2" fill="#1a1a2e"/>
+    <rect x="370" y="348" width="12" height="12" rx="2" fill="#1a1a2e"/>
+    <!-- Robot mouth - digital grid -->
+    <line x1="280" y1="430" x2="380" y2="430" stroke="#4facfe" stroke-width="3" opacity="0.6"/>
+    <line x1="280" y1="445" x2="380" y2="445" stroke="#4facfe" stroke-width="3" opacity="0.4"/>
+    <line x1="280" y1="460" x2="380" y2="460" stroke="#4facfe" stroke-width="3" opacity="0.3"/>
+
+    <!-- Circuit traces emanating from robot -->
+    <g stroke="#4facfe" stroke-width="2.5" fill="none" opacity="0.5">
+      <path d="M220 350 L180 350 L180 400 L160 400"/>
+      <circle cx="155" cy="400" r="5" fill="#4facfe"/>
+      <path d="M220 420 L190 420 L190 480 L170 480"/>
+      <circle cx="165" cy="480" r="5" fill="#4facfe"/>
+      <path d="M330 540 L330 570 L290 570 L290 600"/>
+      <circle cx="290" cy="605" r="5" fill="#4facfe"/>
+      <path d="M370 540 L370 580"/>
+      <circle cx="370" cy="585" r="5" fill="#4facfe"/>
+    </g>
+
+    <!-- Binary/data floating near robot -->
+    <text x="168" y="320" fill="#4facfe" opacity="0.35" font-family="monospace" font-size="22">01</text>
+    <text x="185" y="560" fill="#4facfe" opacity="0.3" font-family="monospace" font-size="18">110</text>
+    <text x="145" y="450" fill="#4facfe" opacity="0.25" font-family="monospace" font-size="16">10</text>
+  </g>
+
+  <!-- === CENTER: Transformation arrow/sweep === -->
+  <g filter="url(#softGlow)">
+    <!-- Sweeping transformation arrow -->
+    <path d="M480 340 C510 340, 530 320, 550 340 L550 480 C530 500, 510 480, 480 480 Z"
+          fill="url(#arcGrad)" opacity="0.2"/>
+    <!-- Arrow body -->
+    <path d="M475 380 L555 410 L475 440"
+          fill="none" stroke="url(#arcGrad)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Sparkle particles in transition zone -->
+    <circle cx="500" cy="350" r="3" fill="#a855f7" opacity="0.6"/>
+    <circle cx="530" cy="370" r="2" fill="#4facfe" opacity="0.7"/>
+    <circle cx="520" cy="450" r="2.5" fill="#7c3aed" opacity="0.5"/>
+    <circle cx="495" cy="465" r="2" fill="#a855f7" opacity="0.6"/>
+    <circle cx="545" cy="430" r="1.8" fill="#4facfe" opacity="0.5"/>
+  </g>
+
+  <!-- === RIGHT SIDE: Human face (smooth, organic curves) === -->
+  <g opacity="0.95">
+    <!-- Human head - smooth, rounded silhouette -->
+    <ellipse cx="700" cy="390" rx="105" ry="130"
+             fill="none" stroke="url(#accentGrad)" stroke-width="5"/>
+    <!-- Hair suggestion - flowing curves -->
+    <path d="M620 310 C620 260, 660 230, 700 225 C740 230, 780 260, 780 310"
+          fill="none" stroke="#a855f7" stroke-width="4" opacity="0.6"/>
+    <!-- Human eyes - soft, expressive -->
+    <ellipse cx="665" cy="370" rx="18" ry="12" fill="none" stroke="#a855f7" stroke-width="3"/>
+    <ellipse cx="735" cy="370" rx="18" ry="12" fill="none" stroke="#a855f7" stroke-width="3"/>
+    <!-- Iris -->
+    <circle cx="668" cy="370" r="6" fill="#a855f7" opacity="0.8"/>
+    <circle cx="738" cy="370" r="6" fill="#a855f7" opacity="0.8"/>
+    <!-- Eyebrows - natural curve -->
+    <path d="M645 348 C655 340, 675 340, 685 346" fill="none" stroke="#a855f7" stroke-width="2.5" opacity="0.6"/>
+    <path d="M715 346 C725 340, 745 340, 755 348" fill="none" stroke="#a855f7" stroke-width="2.5" opacity="0.6"/>
+    <!-- Nose - subtle -->
+    <path d="M700 385 C695 405, 690 415, 695 418" fill="none" stroke="#a855f7" stroke-width="2" opacity="0.4"/>
+    <!-- Smile - warm, human -->
+    <path d="M670 440 C680 458, 720 458, 730 440"
+          fill="none" stroke="#a855f7" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
+  </g>
+
+  <!-- === BOTTOM: Text representation being transformed === -->
+  <g opacity="0.8">
+    <!-- AI text lines (left - blocky, uniform) -->
+    <rect x="200" y="660" width="180" height="6" rx="3" fill="#4facfe" opacity="0.5"/>
+    <rect x="200" y="680" width="150" height="6" rx="3" fill="#4facfe" opacity="0.4"/>
+    <rect x="200" y="700" width="170" height="6" rx="3" fill="#4facfe" opacity="0.35"/>
+    <rect x="200" y="720" width="130" height="6" rx="3" fill="#4facfe" opacity="0.3"/>
+
+    <!-- Small arrow between text blocks -->
+    <path d="M430 690 L480 690" stroke="url(#arcGrad)" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+    <path d="M470 680 L485 690 L470 700" fill="none" stroke="url(#arcGrad)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+
+    <!-- Human text lines (right - varied, natural rhythm) -->
+    <rect x="530" y="660" width="200" height="6" rx="3" fill="#a855f7" opacity="0.5"/>
+    <rect x="530" y="680" width="140" height="6" rx="3" fill="#a855f7" opacity="0.45"/>
+    <rect x="530" y="700" width="190" height="6" rx="3" fill="#a855f7" opacity="0.4"/>
+    <rect x="530" y="720" width="110" height="6" rx="3" fill="#a855f7" opacity="0.35"/>
+    <rect x="530" y="740" width="160" height="6" rx="3" fill="#a855f7" opacity="0.3"/>
+  </g>
+
+  <!-- === APP NAME: "AH" monogram (subtle, at bottom) === -->
+  <text x="512" y="840" text-anchor="middle" fill="url(#accentGrad)" font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif" font-weight="300" font-size="48" letter-spacing="8" opacity="0.6">AI HUMANIZER</text>
+
+  <!-- Subtle border highlight -->
+  <rect x="32" y="32" width="960" height="960" rx="200" ry="200"
+        fill="none" stroke="url(#accentGrad)" stroke-width="2" opacity="0.15"/>
+</svg>
