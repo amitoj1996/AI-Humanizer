@@ -80,11 +80,22 @@ class ProvenanceRecorder {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
+    // Queue events belong to the session we're leaving.  If we kept them,
+    // the next flush against a DIFFERENT session would append old-session
+    // events to the new session — cross-document provenance contamination,
+    // strictly worse than event loss.  seal() retries aggressively (3×
+    // with backoff) before we get here; if it still couldn't flush, we
+    // log and drop rather than corrupt.
+    if (this.queue.length > 0) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `Discarding ${this.queue.length} undelivered provenance events ` +
+          `from session ${this.sessionId} — seal() retries exhausted.`,
+      );
+    }
+    this.queue = [];
     this.sessionId = null;
     this.documentId = null;
-    // Intentionally keep `queue` untouched: if seal() failed and left events
-    // pending for the previous session, nuking the queue would lose them.
-    // In the common case, seal() succeeded and the queue is already empty.
     this.startingSession = null;
   }
 

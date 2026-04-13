@@ -15,6 +15,9 @@ export default defineConfig({
   timeout: 60_000,
   fullyParallel: false, // we have a single backend; keep tests sequential
   reporter: process.env.CI ? [["list"], ["github"]] : "list",
+  // Nuke ./e2e-data before every run so the first-test "No projects yet"
+  // assertion is deterministic across local re-runs.
+  globalSetup: "./e2e/globalSetup.ts",
   use: {
     baseURL: `http://127.0.0.1:${FRONTEND_PORT}`,
     trace: "on-first-retry",

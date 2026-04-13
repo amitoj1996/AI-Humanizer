@@ -6,7 +6,26 @@ on:
   workflow_dispatch:
 
 jobs:
+  check-baseline:
+    runs-on: ubuntu-latest
+    outputs:
+      has_baseline: ${{ steps.check.outputs.has_baseline }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          if [ -f backend/app/eval/baseline.json ]; then
+            echo "has_baseline=true" >> $GITHUB_OUTPUT
+            echo "Baseline present — eval regression gate will enforce."
+          else
+            echo "has_baseline=false" >> $GITHUB_OUTPUT
+            echo "::warning::No baseline.json committed — eval gate not enforcing."
+            echo "::warning::Run 'python -m app.eval.runner --update-baseline' locally and commit."
+          fi
+
   eval:
+    needs: check-baseline
+    if: needs.check-baseline.outputs.has_baseline == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

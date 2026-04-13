@@ -29,8 +29,13 @@ def real_detector():
 def test_detection_regression(real_detector):
     metrics = runner.run_detection_metrics(real_detector)
     baseline_path = Path(runner.BASELINE_PATH)
-    if not baseline_path.exists():
-        pytest.skip(f"No baseline at {baseline_path}; run --update-baseline")
+    # Fail loudly rather than skip when baseline is missing — otherwise the
+    # "regression gate" silently passes in CI without enforcing anything.
+    assert baseline_path.exists(), (
+        f"No baseline at {baseline_path}. Run\n"
+        f"    python -m app.eval.runner --update-baseline\n"
+        f"on a known-good machine and commit the resulting baseline.json."
+    )
     baseline = json.loads(baseline_path.read_text())
 
     assert (
@@ -60,8 +65,11 @@ def test_detection_regression(real_detector):
 def test_preserve_no_regression():
     metrics = runner.run_preserve_metrics()
     baseline_path = Path(runner.BASELINE_PATH)
-    if not baseline_path.exists():
-        pytest.skip(f"No baseline at {baseline_path}; run --update-baseline")
+    assert baseline_path.exists(), (
+        f"No baseline at {baseline_path}. Run\n"
+        f"    python -m app.eval.runner --update-baseline\n"
+        f"on a known-good machine and commit the resulting baseline.json."
+    )
     baseline = json.loads(baseline_path.read_text())
     # Preservation must NEVER regress — it's deterministic.
     assert metrics["pass_rate"] >= baseline["preserve"]["pass_rate"], (
