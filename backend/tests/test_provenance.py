@@ -367,29 +367,32 @@ def test_replay_builds_snapshots_from_revisions_and_rewrites(client):
 
 def test_replay_dedupes_identical_adjacent_content(client):
     """After an ai_rewrite_applied, HumanizePanel saves the same text as a
-    revision too.  The replay should collapse those into one snapshot with
-    merged metadata rather than show the user a duplicate frame."""
+    revision too.  The replay should collapse THIS specific pattern (rewrite
+    immediately followed by a revision with identical content within the
+    dedup window) into one frame.  Other duplicate-content cases stay as
+    distinct frames — covered by separate tests below."""
     import time
 
     p = client.post("/api/projects", json={"name": "P"}).json()
+    # Skip initial_content so we don't create an initial revision that
+    # would land between the rewrite and the manual save in time order.
     doc = client.post(
         "/api/documents",
-        json={"project_id": p["id"], "title": "Dedup Test", "initial_content": "original"},
+        json={"project_id": p["id"], "title": "Dedup Test"},
     ).json()
     doc_id = doc["id"]
     s = client.post("/api/sessions", json={"document_id": doc_id}).json()
 
-    # Use a timestamp AFTER the initial revision's created_at (which is
-    # now_ms() at create_document time), otherwise sort order puts the
-    # rewrite before the initial revision and no dedup chance exists.
-    future_ts = int(time.time() * 1000) + 10_000
+    # Rewrite slightly in the past so the manual revision (created at now_ms())
+    # is chronologically AFTER the rewrite and within the 5-second window.
+    rewrite_ts = int(time.time() * 1000) - 500
 
     client.post(
         f"/api/sessions/{s['id']}/events",
         json={
             "events": [{
                 "event_type": "ai_rewrite_applied",
-                "timestamp": future_ts,
+                "timestamp": rewrite_ts,
                 "payload": {
                     "before_text": "original",
                     "after_text": "polished",
@@ -402,7 +405,6 @@ def test_replay_dedupes_identical_adjacent_content(client):
             }]
         },
     )
-    # Immediately save a revision with the same post-rewrite content
     client.post(
         f"/api/documents/{doc_id}/revisions",
         json={"content": "polished", "ai_score": 0.2},
@@ -410,9 +412,80 @@ def test_replay_dedupes_identical_adjacent_content(client):
 
     r = client.get(f"/api/documents/{doc_id}/provenance/replay").json()
     polished = [s for s in r["snapshots"] if s["content"] == "polished"]
-    # Only one snapshot for "polished" — the revision merged into the rewrite
     assert len(polished) == 1, f"Expected merged dedup, got {len(polished)} frames"
     assert "+" in polished[0]["kind"]  # combined kind label
+
+
+def test_replay_does_not_dedupe_resaves_of_same_content(client):
+    """Manually re-saving the same content (no rewrite involved) must
+    appear as a separate replay frame — it's a distinct user checkpoint."""
+    p = client.post("/api/projects", json={"name": "P"}).json()
+    doc = client.post(
+        "/api/documents",
+        json={"project_id": p["id"], "title": "Manual Resave", "initial_content": "v1"},
+    ).json()
+    doc_id = doc["id"]
+    # Save the same content again — content_hash dedup at the service layer
+    # will return the head, so we save genuinely different intermediate
+    # content first, then save back to v1.
+    client.post(
+        f"/api/documents/{doc_id}/revisions", json={"content": "v2"}
+    )
+    # Now save v1 again — distinct revision id, distinct timestamp
+    client.post(
+        f"/api/documents/{doc_id}/revisions", json={"content": "v1"}
+    )
+
+    r = client.get(f"/api/documents/{doc_id}/provenance/replay").json()
+    v1_frames = [s for s in r["snapshots"] if s["content"] == "v1"]
+    # Two distinct v1 snapshots — initial revision + the re-save
+    assert len(v1_frames) == 2, (
+        f"Expected 2 distinct v1 frames, got {len(v1_frames)} — replay "
+        f"is incorrectly merging user checkpoints"
+    )
+
+
+def test_replay_does_not_dedupe_distant_rewrite_and_revision(client):
+    """A rewrite from yesterday and a manual save with identical content
+    today must remain distinct frames — same content alone isn't enough
+    to merge."""
+    import time
+
+    p = client.post("/api/projects", json={"name": "P"}).json()
+    doc = client.post(
+        "/api/documents",
+        json={"project_id": p["id"], "title": "Distant", "initial_content": "draft"},
+    ).json()
+    doc_id = doc["id"]
+    s = client.post("/api/sessions", json={"document_id": doc_id}).json()
+    rewrite_ts = int(time.time() * 1000) - 24 * 60 * 60 * 1000  # 1 day ago
+    client.post(
+        f"/api/sessions/{s['id']}/events",
+        json={
+            "events": [{
+                "event_type": "ai_rewrite_applied",
+                "timestamp": rewrite_ts,
+                "payload": {
+                    "before_text": "draft",
+                    "after_text": "polished",
+                    "strength": "medium",
+                    "tone": "general",
+                    "mode": "full",
+                    "ai_score_before": 0.8,
+                    "ai_score_after": 0.2,
+                },
+            }]
+        },
+    )
+    # Now save the same "polished" content manually, far in the future
+    client.post(
+        f"/api/documents/{doc_id}/revisions", json={"content": "polished"}
+    )
+
+    r = client.get(f"/api/documents/{doc_id}/provenance/replay").json()
+    polished = [s for s in r["snapshots"] if s["content"] == "polished"]
+    # Distinct frames — the rewrite is too far in the past to merge
+    assert len(polished) == 2
 
 
 def test_replay_requires_document(client):

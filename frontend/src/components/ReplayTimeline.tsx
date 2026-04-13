@@ -25,15 +25,13 @@ function kindColor(kind: string): string {
 }
 
 type FetchState =
-  | { status: "loading" }
-  | { status: "ready"; data: ReplayData }
-  | { status: "error" };
+  | { status: "idle" }
+  | { status: "ready"; documentId: string; data: ReplayData }
+  | { status: "error"; documentId: string };
 
 export function ReplayTimeline() {
   const { currentDocumentId } = useDocumentsStore();
-  // Single state primitive — avoids the react-hooks/set-state-in-effect rule
-  // that fires on synchronous setLoading(true) inside an effect body.
-  const [state, setState] = useState<FetchState>({ status: "loading" });
+  const [state, setState] = useState<FetchState>({ status: "idle" });
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
@@ -43,25 +41,32 @@ export function ReplayTimeline() {
       .getReplay(currentDocumentId)
       .then((d) => {
         if (cancelled) return;
-        setState({ status: "ready", data: d });
+        setState({ status: "ready", documentId: currentDocumentId, data: d });
         setIndex(Math.max(0, d.snapshots.length - 1));
       })
       .catch(() => {
-        if (!cancelled) setState({ status: "error" });
+        if (!cancelled)
+          setState({ status: "error", documentId: currentDocumentId });
       });
     return () => {
       cancelled = true;
     };
   }, [currentDocumentId]);
 
-  const data = state.status === "ready" ? state.data : null;
+  // "Stale" = the fetched data is for a different doc than the one we now
+  // have selected.  Treated as loading so the previous doc's content doesn't
+  // briefly flash before the new fetch resolves.
+  const isStale =
+    state.status !== "idle" && state.documentId !== currentDocumentId;
+  const data =
+    state.status === "ready" && !isStale ? state.data : null;
 
   const snapshot: ReplaySnapshot | null = useMemo(() => {
     if (!data || data.snapshots.length === 0) return null;
     return data.snapshots[Math.min(index, data.snapshots.length - 1)];
   }, [data, index]);
 
-  if (state.status === "loading") {
+  if (state.status === "idle" || isStale) {
     return <p className="text-sm text-zinc-500">Loading replay…</p>;
   }
   if (state.status === "error" || !data || data.snapshots.length === 0) {

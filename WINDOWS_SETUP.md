@@ -449,11 +449,133 @@ a stable cert over a few hundred installs.
 | 4 | `07e0314` | Windows installer: PyInstaller onedir + Inno Setup + WebView2/Ollama bootstrap; cross-platform spec |
 | 5 | `cfd634a` | Citation-aware rewriting: regex-detected citations/quotes/code/LaTeX survive humanization verbatim |
 | 6 | `74619ff` | Trust fixes from code review: test isolation (67 tests pass offline in 1.7 s), offline fonts, NLTK removal, DOCX ordering, seal verification, Alembic migrations |
-| 7 | `0c815a0` | **Phase 7** (see below) |
+| 7 | `0c815a0` | Eval harness, Playwright smoke tests, two more provenance event-loss bug fixes |
+| 7-fix | `8c5cf2d` | Review fixes: cross-session contamination, eval gate enforcement, Playwright hermeticity |
+| 8 | `59f4a45` | **Authoring replay** + CUDA dev helper + eval corpus expansion (8→14) |
 
 ---
 
-## Phase 7 — what we just did
+## Phase 8 — Authoring Replay (the headline feature)
+
+The provenance hash chain we shipped in Phase 2 now powers a **scrubbable
+history view of the document** — the same product surface as Grammarly
+Authorship and Turnitin's Authorship Dashboard, but local.
+
+- **Backend** — `app/provenance/replay.py` walks revisions + AI-rewrite
+  events into a time-sorted snapshot list; the API exposes
+  `GET /api/documents/{id}/provenance/replay`.
+- **Frontend** — new `Authoring Replay` tab in the Writing Process Report
+  modal with a scrubber, colour-coded tick marks (revision = green,
+  AI rewrite = purple, merged = striped), per-snapshot metadata, and a
+  reconstructed-content viewer with copy-to-clipboard.
+- **CUDA dev helper** — `scripts\enable-cuda.ps1` detects `nvidia-smi`,
+  picks the highest matching PyTorch wheel index, and reinstalls torch
+  into `backend\venv`. Verifies `torch.cuda.is_available()` before
+  declaring success.
+- **Eval corpus** — grew from 8+8 to 14+14 hand-curated samples; bigger
+  signal for the regression gate without licensing fragility.
+
+### Honest scope
+- Per-keystroke replay (sub-revision granularity) needs cursor-position
+  tracking the textarea-based recorder doesn't currently capture. Every
+  *save* and every *AI rewrite* is a navigable frame, which is what
+  matters for academic-integrity / authorship-proof use cases. To get
+  per-keystroke we'd need the Tiptap migration (see Phase 9 below).
+- CUDA helper targets the dev venv only — the PyInstaller-frozen Windows
+  installer still ships CPU torch. CUDA inside the bundle is a separate
+  problem (see Phase 9).
+
+---
+
+## Phase 9 candidates — what's next, in priority order
+
+These three are the remaining serious work. Browser extension and code
+signing are explicitly **dropped from the roadmap**.
+
+### 1. Tiptap / ProseMirror editor migration (highest leverage)
+
+**Why**: Replaces the textarea with a real rich editor. Unlocks
+per-keystroke replay (since ProseMirror transactions are typed semantic
+operations, not blind DOM input events), enables formatting preservation
+through humanize, and gives us track-changes / comment-thread surface for
+free if we want them later. Turns the app from "smart textarea" into a
+proper writing tool.
+
+**How** (researched April 2026):
+- Tiptap's `onTransaction` hook intercepts every ProseMirror transaction
+  before it's applied — that's the exact integration point our recorder
+  needs. Existing community projects do exactly this:
+  [chenyuncai/tiptap-track-change-extension](https://deepwiki.com/chenyuncai/tiptap-track-change-extension/2.2-transaction-processing)
+  is a working reference for transaction-level change tracking with full
+  IME / collaborative-edit / undo-redo handling.
+- Tiptap is framework-agnostic; the React bindings (`@tiptap/react`) work
+  cleanly inside Next.js client components. Replace `<textarea>` in
+  `TextInput.tsx` with `<EditorContent editor={editor} />` and migrate
+  the recorder hook to listen on `editor.on('transaction', ...)` instead
+  of DOM `beforeinput`.
+- Document storage: store ProseMirror's JSON representation
+  (`editor.getJSON()`) in `Revision.content` instead of plain text. Add a
+  `format` column (`text` vs `prosemirror`) so existing revisions stay
+  loadable. Extract plain text via `editor.getText()` for the detector.
+- Estimated effort: 1 week. Touches editor, recorder, revision storage
+  schema, replay (gain per-step granularity), provenance reporting.
+- References:
+  [Tiptap concepts](https://tiptap.dev/docs/editor/core-concepts/introduction),
+  [ProseMirror transactions](https://tiptap.dev/docs/editor/core-concepts/prosemirror).
+
+### 2. CUDA inside the PyInstaller bundle
+
+**Why**: `enable-cuda.ps1` works for the dev venv but the
+`AIHumanizerSetup.exe` installer ships CPU-only torch. Users without a
+dev environment can't get GPU acceleration today.
+
+**How** (researched April 2026):
+- The torch CUDA wheels are ~2.5 GB each, so we can't bundle them all
+  in the installer (which is already ~1.5 GB).
+- Recommended pattern from the
+  [PyInstaller + PyTorch discussion threads](https://github.com/pyinstaller/pyinstaller/issues/7175):
+  ship CPU torch in the bundle, then on first launch:
+  1. Detect `nvidia-smi` via subprocess
+  2. Download the matching CUDA wheel (cu124 etc.) into
+     `%LOCALAPPDATA%\AIHumanizer\torch-cuda\`
+  3. Insert that path at the front of `sys.path` so it shadows the
+     bundled torch
+  4. Restart the Python process so the new torch is loaded clean
+- Risks called out in the threads: DLL-load failures when CUDA driver
+  version is older than the wheel's CUDA version (e.g. mixing cu124
+  bundled DLLs with a driver that only supports cu118). Mitigate by
+  parsing the driver-reported CUDA from `nvidia-smi` (we already do this
+  in `enable-cuda.ps1`) and downloading the highest compatible wheel.
+- Estimated effort: 3-4 days. Mostly `desktop.py` first-launch logic plus
+  installer UI for "(optional) GPU acceleration: 2.5 GB extra download".
+
+### 3. Real frontier eval corpus (HC3)
+
+**Why**: The hand-curated 14+14 samples catch obvious regressions but
+don't have statistical signal. A real benchmark would let us claim
+honest detector accuracy numbers and do A/B comparisons against
+ensemble-weight tweaks.
+
+**How** (researched April 2026):
+- [HC3 (Hello-SimpleAI/HC3)](https://huggingface.co/datasets/Hello-SimpleAI/HC3)
+  is the standard human-vs-ChatGPT corpus: ~37k human replies + ~37k
+  ChatGPT outputs, sourced from Reddit ELI5, Quora, StackExchange and
+  topic-tagged (medicine, finance, etc.).
+- License: **CC BY-SA**, redistributable with attribution. We can pull
+  a 500-1000 sample slice into `app/eval/samples/hc3_subset.json` and
+  ship it in the repo without legal risk.
+- The follow-up
+  [HC3 Plus](https://arxiv.org/abs/2309.02731) corpus (semantic-invariant
+  variants) is also CC BY-SA and would be a natural Phase 10 expansion
+  for paraphrasing-attack robustness testing.
+- Estimated effort: 1-2 days. Add an `app/eval/fetch_hc3.py` script that
+  downloads + samples + filters the corpus once, regenerate baseline,
+  bump `ACCURACY_TOLERANCE` from 0.10 toward 0.05 since signal will be
+  much stronger.
+
+---
+
+## Phase 7 — what we shipped earlier
 
 Phase 7 answered two external-review demands: **rigor** (eval harness) and
 **integrity completeness** (provenance event-loss fixes).

@@ -29,6 +29,13 @@ from sqlmodel import Session, select
 
 from ..db.models import Document, ProvenanceEvent, Revision
 
+# How close in time an `ai_rewrite_applied` and a `revision_saved` with
+# identical content have to be for them to count as the same checkpoint.
+# HumanizePanel.run() saves the auto-revision in the same async chain as
+# the rewrite-applied event, so they're typically <100 ms apart in practice.
+# Pick 5 s as a safe ceiling that won't merge user-driven checkpoints.
+_DEDUP_WINDOW_MS = 5_000
+
 
 def build_replay(session: Session, document_id: str) -> dict:
     """Aggregate revisions + provenance events into a scrubbable timeline."""
@@ -88,14 +95,24 @@ def build_replay(session: Session, document_id: str) -> dict:
             )
 
     snapshots.sort(key=lambda s: s["timestamp"])
-    # Dedup consecutive snapshots with identical content (revision-saved
-    # immediately after an ai_rewrite typically produces a dup).
+    # Narrow dedup: ONLY merge the specific "HumanizePanel auto-saves the
+    # rewrite output as a revision" pattern (ai_rewrite immediately followed
+    # by a revision with identical content).  Any other duplicate-content
+    # case — re-saving the same text manually, restoring to identical
+    # content, typing-then-deleting back to the same string — represents a
+    # distinct user checkpoint and stays as its own frame.
     deduped: list[dict[str, Any]] = []
     for s in snapshots:
-        if deduped and deduped[-1]["content"] == s["content"]:
-            # Merge metadata so we don't lose the "this was both a rewrite
-            # and a saved revision" story.
-            prev = deduped[-1]
+        prev = deduped[-1] if deduped else None
+        is_rewrite_then_revision_dup = (
+            prev is not None
+            and prev["content"] == s["content"]
+            and prev["kind"] == "ai_rewrite"
+            and s["kind"] == "revision"
+            and (s["timestamp"] - prev["timestamp"]) <= _DEDUP_WINDOW_MS
+        )
+        if is_rewrite_then_revision_dup:
+            assert prev is not None
             prev["kind"] = f"{prev['kind']}+{s['kind']}"
             prev.setdefault("merged_source_ids", [prev["source_id"]]).append(
                 s["source_id"]
