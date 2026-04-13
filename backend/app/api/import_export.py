@@ -24,6 +24,7 @@ from ..ingest.dispatcher import UnsupportedFileError, parse_file
 from ..provenance import service as provenance_service
 from ..schemas.import_export import ImportResult
 from ..services import documents as doc_service
+from ..services import prosemirror as pm
 
 router = APIRouter(prefix="/api", tags=["import-export"])
 
@@ -115,15 +116,18 @@ def export_document(
     if revision is None:
         raise HTTPException(status_code=500, detail="Current revision missing")
 
-    content = revision.content
+    rev_format = getattr(revision, "format", "text")
     mime, ext = EXPORT_FORMATS[format]
 
+    # Resolve the right shape for each export target.  ProseMirror revisions
+    # get richer markdown (headings/marks/lists), plain text otherwise.
     if format == "md":
-        body = text_export.export_md(content)
+        body = text_export.export_md(pm.to_markdown(revision.content, format=rev_format))
     elif format == "txt":
-        body = text_export.export_txt(content)
+        body = text_export.export_txt(pm.to_plain_text(revision.content, format=rev_format))
     else:
-        body = docx_export.export(content, title=doc.title)
+        plain_for_docx = pm.to_plain_text(revision.content, format=rev_format)
+        body = docx_export.export(plain_for_docx, title=doc.title)
 
     safe_title = doc.title.replace("/", "_").replace("\\", "_")
     return Response(

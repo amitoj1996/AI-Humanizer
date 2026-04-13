@@ -72,7 +72,9 @@ export function HumanizeControls() {
         aiScoreAfter: res.detection_after.ai_score,
       });
 
-      // Auto-save humanized output as a new revision
+      // Auto-save humanized output as a new revision.  The humanized text
+      // is plain (it came from the LLM as a string) so we save format=text
+      // — the editor's JSON view will rebuild on the next user keystroke.
       const docId = useDocumentsStore.getState().currentDocumentId;
       if (docId) {
         const rev = await useDocumentsStore
@@ -82,6 +84,7 @@ export function HumanizeControls() {
             res.humanized,
             res.detection_after.ai_score,
             `Humanized (${strength}/${tone}/${mode})`,
+            "text",
           );
         recorder.revisionSaved(rev.id, res.detection_after.ai_score);
       }

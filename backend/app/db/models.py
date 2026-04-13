@@ -55,6 +55,10 @@ class Revision(SQLModel, table=True):
     parent_id: Optional[str] = Field(default=None, foreign_key="revisions.id")
     content: str
     content_hash: str = Field(index=True)
+    # 'text' (default, plain string) or 'prosemirror' (canonical JSON of the
+    # ProseMirror doc).  Lets the frontend round-trip rich-text documents
+    # without losing headings/marks/lists across save/load/restore.
+    format: str = Field(default="text")
     ai_score: Optional[float] = None
     note: Optional[str] = None
     created_at: int = Field(default_factory=_now_ms, index=True)

@@ -50,12 +50,22 @@ export function DetectControls() {
       if (aiScore !== undefined) {
         recorder.detectionRun(aiScore, verdict, detectionMode);
       }
-      // Auto-save revision snapshot of current text with AI score attached
+      // Auto-save revision snapshot of current state with AI score attached.
+      // Prefer the structured doc when the editor has one so headings/marks
+      // survive the round-trip.
       const docId = useDocumentsStore.getState().currentDocumentId;
+      const json = useAppStore.getState().documentJson;
       if (docId && aiScore !== undefined) {
+        const useJson = json !== null;
         const rev = await useDocumentsStore
           .getState()
-          .saveRevision(docId, text, aiScore, "After detection");
+          .saveRevision(
+            docId,
+            useJson ? JSON.stringify(json) : text,
+            aiScore,
+            "After detection",
+            useJson ? "prosemirror" : "text",
+          );
         recorder.revisionSaved(rev.id, aiScore);
       }
     } catch (e) {

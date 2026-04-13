@@ -57,6 +57,7 @@ def create_document(req: DocumentCreate, session: Session = Depends(get_session)
         title=req.title,
         source_type=req.source_type,
         initial_content=req.initial_content,
+        initial_format=req.initial_format,
     )
 
 
@@ -111,6 +112,7 @@ def save_revision(
         content=req.content,
         ai_score=req.ai_score,
         note=req.note,
+        format=req.format,
     )
     if rev is None:
         raise HTTPException(status_code=404, detail="Document not found")

@@ -24,7 +24,13 @@ type DocumentsState = {
   deleteDocument: (id: string) => Promise<void>;
 
   loadRevisions: (docId: string) => Promise<void>;
-  saveRevision: (docId: string, content: string, aiScore?: number, note?: string) => Promise<Revision>;
+  saveRevision: (
+    docId: string,
+    content: string,
+    aiScore?: number,
+    note?: string,
+    format?: "text" | "prosemirror",
+  ) => Promise<Revision>;
   restoreRevision: (docId: string, revId: string) => Promise<Revision>;
 };
 
@@ -134,9 +140,10 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
     set({ currentRevisions: revs });
   },
 
-  saveRevision: async (docId, content, aiScore, note) => {
+  saveRevision: async (docId, content, aiScore, note, format = "text") => {
     const rev = await api.saveRevision(docId, {
       content,
+      format,
       ai_score: aiScore,
       note,
     });

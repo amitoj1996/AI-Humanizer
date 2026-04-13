@@ -16,7 +16,7 @@ export function DocumentHeader() {
     renameDocument,
     saveRevision,
   } = useDocumentsStore();
-  const { text } = useAppStore();
+  const { text, documentJson } = useAppStore();
   const [editingTitle, setEditingTitle] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
 
@@ -36,7 +36,17 @@ export function DocumentHeader() {
 
   const handleSave = async () => {
     if (!text.trim()) return;
-    const rev = await saveRevision(doc.id, text);
+    // Save the structured doc when the editor has one (preserves
+    // headings/marks/lists across reload); fall back to plain text only
+    // if for some reason we don't have JSON yet.
+    const useJson = documentJson !== null;
+    const rev = await saveRevision(
+      doc.id,
+      useJson ? JSON.stringify(documentJson) : text,
+      undefined,
+      undefined,
+      useJson ? "prosemirror" : "text",
+    );
     // Provenance: record the manual save so the writing-process report
     // shows user-driven checkpoints, not just detect/humanize events.
     recorder.revisionSaved(rev.id, rev.ai_score);

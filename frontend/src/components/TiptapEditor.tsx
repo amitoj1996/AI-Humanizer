@@ -1,6 +1,7 @@
 "use client";
 
 import Placeholder from "@tiptap/extension-placeholder";
+import type { Content, JSONContent } from "@tiptap/react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef } from "react";
@@ -9,22 +10,21 @@ import { useTiptapProvenanceCapture } from "../lib/useTiptapProvenanceCapture";
 import { useAppStore } from "../store/app";
 
 /**
- * Tiptap-based prose editor.  Replaces the textarea — gives us:
- *   - Real document model (ProseMirror) instead of a blob of characters
- *   - Typed transactions for fine-grained provenance capture
- *   - Future hooks for headings / lists / inline marks without rebuilding
+ * Tiptap-based prose editor.
  *
- * KNOWN INTERIM LIMITATION (data loss): plain text round-trips through
- * the rest of the app via `editor.getText()`.  Marks (bold/italic/code),
- * heading levels, list structure, and blockquotes are STRIPPED on
- * save / detect / humanize / document switch.  Migrating `Revision.content`
- * to ProseMirror JSON (with a `format` column for backwards compat) is
- * the next phase; for now the rich editor is a UX upgrade only, not a
- * structural-content one.
+ * Two views of the document live in the store:
+ *   - `text` (plain string) — what detect/humanize see, and what the
+ *     revision content_hash dedup key is computed from.
+ *   - `documentJson` (ProseMirror doc) — the canonical structured form,
+ *     used for revision saves with `format: "prosemirror"` and for replay.
+ *
+ * On load (doc switch / restore), if the revision is `prosemirror` we
+ * hydrate the editor from JSON; if `text` we fall back to the string.
+ * Either way both projections in the store stay coherent.
  */
 
 export function TiptapEditor() {
-  const { text, setText } = useAppStore();
+  const { text, documentJson, setText, setDocumentJson } = useAppStore();
   const containerRef = useRef<HTMLDivElement>(null);
   // Set to `true` while we're programmatically writing into the editor (doc
   // load, restore, post-humanize sync).  The provenance hook checks this
@@ -45,12 +45,18 @@ export function TiptapEditor() {
     ],
     // Required for Next.js SSR — without this we get a hydration mismatch.
     immediatelyRender: false,
-    content: text,
+    // Prefer the structured doc when available; fall back to plain text
+    // for legacy revisions or first-launch.
+    content: (documentJson as Content | undefined) ?? text,
     onUpdate: ({ editor: e }) => {
-      // Sync plain text to the store so the rest of the app
-      // (detect/humanize/save) keeps working unchanged.
-      const next = e.getText();
-      if (next !== text) setText(next);
+      // Keep BOTH projections in sync.  Plain text drives detect/humanize,
+      // the JSON drives revision saves and replay frames.
+      const nextText = e.getText();
+      const nextJson = e.getJSON();
+      if (nextText !== text) setText(nextText);
+      if (JSON.stringify(nextJson) !== JSON.stringify(documentJson)) {
+        setDocumentJson(nextJson);
+      }
     },
     editorProps: {
       attributes: {
@@ -69,27 +75,33 @@ export function TiptapEditor() {
 
   useTiptapProvenanceCapture(editor, programmaticUpdateRef);
 
-  // Programmatic text updates from the store (doc switch, restore-revision,
-  // setText after humanize) need to flow back into the editor.  We compare
-  // current editor text to the store value to break the loop, then mark
-  // the transaction as programmatic so the provenance hook skips it.
+  // Programmatic content sync: when the store changes (doc switch / restore
+  // / post-humanize), push the new content into the editor.  Prefer the
+  // structured JSON when present (preserves headings/marks/lists across
+  // restore); fall back to plain text for legacy revisions.
   useEffect(() => {
     if (!editor) return;
-    if (editor.getText() === text) return;
+    const currentEditorText = editor.getText();
+    const currentEditorJson = editor.getJSON();
+
+    const targetIsJson = documentJson !== null;
+    const needsUpdate = targetIsJson
+      ? JSON.stringify(currentEditorJson) !== JSON.stringify(documentJson)
+      : currentEditorText !== text;
+    if (!needsUpdate) return;
+
     programmaticUpdateRef.current = true;
     try {
-      // emitUpdate:false sets `tr.setMeta('preventUpdate', true)` which the
-      // hook also checks — two independent reasons to skip recording.
-      editor.commands.setContent(text, { emitUpdate: false });
+      // emitUpdate:false also sets `tr.setMeta('preventUpdate', true)` —
+      // both the ref AND the meta are checked by the provenance hook.
+      const payload: Content = targetIsJson ? (documentJson as JSONContent) : text;
+      editor.commands.setContent(payload, { emitUpdate: false });
     } finally {
-      // Clear after the transaction has flushed.  Using queueMicrotask
-      // (rather than setTimeout(0)) means we re-arm before any animation
-      // frame, so subsequent user keystrokes are recorded correctly.
       queueMicrotask(() => {
         programmaticUpdateRef.current = false;
       });
     }
-  }, [editor, text]);
+  }, [editor, text, documentJson]);
 
   // Tiptap docs: render null until the editor is initialised on the
   // client to avoid SSR hydration mismatches.

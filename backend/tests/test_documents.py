@@ -164,6 +164,112 @@ def test_create_document_invalid_project(client):
     assert r.status_code == 404
 
 
+def test_revision_format_defaults_to_text(client):
+    """Backwards compat: clients that don't pass format get plain text."""
+    p = client.post("/api/projects", json={"name": "P"}).json()
+    doc = client.post(
+        "/api/documents",
+        json={"project_id": p["id"], "title": "D", "initial_content": "hello"},
+    ).json()
+    revs = client.get(f"/api/documents/{doc['id']}/revisions").json()
+    assert revs[0]["format"] == "text"
+
+
+def test_revision_prosemirror_roundtrip(client):
+    """Save a ProseMirror JSON revision, read it back unchanged."""
+    p = client.post("/api/projects", json={"name": "P"}).json()
+    doc = client.post(
+        "/api/documents", json={"project_id": p["id"], "title": "PM Doc"}
+    ).json()
+
+    pm_json = (
+        '{"type":"doc","content":['
+        '{"type":"heading","attrs":{"level":1},"content":[{"type":"text","text":"Title"}]},'
+        '{"type":"paragraph","content":[{"type":"text","text":"Body line."}]}'
+        "]}"
+    )
+    r = client.post(
+        f"/api/documents/{doc['id']}/revisions",
+        json={"content": pm_json, "format": "prosemirror"},
+    )
+    assert r.status_code == 200
+    rev = r.json()
+    assert rev["format"] == "prosemirror"
+    assert rev["content"] == pm_json
+
+
+def test_revision_format_part_of_dedup_key(client):
+    """Same byte string but different format should NOT dedup — they
+    represent semantically different documents (text vs structured)."""
+    p = client.post("/api/projects", json={"name": "P"}).json()
+    doc = client.post(
+        "/api/documents", json={"project_id": p["id"], "title": "Dedup"}
+    ).json()
+    # Save a plain-text revision
+    client.post(
+        f"/api/documents/{doc['id']}/revisions",
+        json={"content": "hello", "format": "text"},
+    )
+    # Save a "ProseMirror" revision whose content happens to equal "hello"
+    # — different format, so it must NOT be deduped.
+    client.post(
+        f"/api/documents/{doc['id']}/revisions",
+        json={"content": "hello", "format": "prosemirror"},
+    )
+    revs = client.get(f"/api/documents/{doc['id']}/revisions").json()
+    assert len(revs) == 2
+
+
+def test_restore_preserves_format(client):
+    p = client.post("/api/projects", json={"name": "P"}).json()
+    doc = client.post(
+        "/api/documents", json={"project_id": p["id"], "title": "D"}
+    ).json()
+    pm = '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"hi"}]}]}'
+    rev1 = client.post(
+        f"/api/documents/{doc['id']}/revisions",
+        json={"content": pm, "format": "prosemirror"},
+    ).json()
+    # Append a plain-text revision so HEAD is no longer rev1
+    client.post(
+        f"/api/documents/{doc['id']}/revisions",
+        json={"content": "plain", "format": "text"},
+    )
+    # Restore rev1 — should come back as a NEW revision still in prosemirror format
+    restored = client.post(
+        f"/api/documents/{doc['id']}/revisions/{rev1['id']}/restore"
+    ).json()
+    assert restored["format"] == "prosemirror"
+    assert restored["content"] == pm
+
+
+def test_export_prosemirror_to_markdown(client):
+    """Markdown export of a ProseMirror revision should preserve headings
+    and bold marks, not just dump the JSON string."""
+    p = client.post("/api/projects", json={"name": "P"}).json()
+    doc = client.post(
+        "/api/documents", json={"project_id": p["id"], "title": "MD Export"}
+    ).json()
+    pm = (
+        '{"type":"doc","content":['
+        '{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Section"}]},'
+        '{"type":"paragraph","content":['
+        '{"type":"text","text":"hello "},'
+        '{"type":"text","text":"bold","marks":[{"type":"bold"}]},'
+        '{"type":"text","text":" world"}'
+        "]}]}"
+    )
+    client.post(
+        f"/api/documents/{doc['id']}/revisions",
+        json={"content": pm, "format": "prosemirror"},
+    )
+    r = client.get(f"/api/documents/{doc['id']}/export?format=md")
+    assert r.status_code == 200
+    body = r.text
+    assert "## Section" in body
+    assert "**bold**" in body
+
+
 def test_list_documents_in_project(client):
     p = client.post("/api/projects", json={"name": "P"}).json()
     client.post("/api/documents", json={"project_id": p["id"], "title": "A"})

@@ -95,13 +95,14 @@ def create_document(
     title: str,
     source_type: str = "blank",
     initial_content: str | None = None,
+    initial_format: str = "text",
 ) -> Document:
     doc = Document(project_id=project_id, title=title, source_type=source_type)
     session.add(doc)
     session.flush()  # assign doc.id before we create the initial revision
 
     if initial_content is not None:
-        rev = _create_revision_inner(session, doc.id, initial_content)
+        rev = _create_revision_inner(session, doc.id, initial_content, format=initial_format)
         doc.current_revision_id = rev.id
 
     session.commit()
@@ -156,6 +157,7 @@ def _create_revision_inner(
     content: str,
     ai_score: float | None = None,
     note: str | None = None,
+    format: str = "text",
 ) -> Revision:
     """Insert a revision without committing.  Caller is responsible."""
     parent = _current_head(session, document_id)
@@ -165,6 +167,7 @@ def _create_revision_inner(
         parent_id=parent.id if parent else None,
         content=content,
         content_hash=content_hash,
+        format=format,
         ai_score=ai_score,
         note=note,
     )
@@ -179,11 +182,15 @@ def save_revision(
     content: str,
     ai_score: float | None = None,
     note: str | None = None,
+    format: str = "text",
 ) -> Optional[Revision]:
     """Append a new revision and update the document HEAD pointer.
 
-    If the content is identical to the current HEAD, no-op and return the
-    existing head (dedup).
+    If the (format, content) pair is identical to the current HEAD, no-op
+    and return the existing head (dedup).  Format is part of the dedup key
+    so a "save plain text" right after a "save ProseMirror JSON" with
+    equivalent text content still creates a fresh revision — those are
+    semantically different (the JSON carries marks the text doesn't).
     """
     doc = session.get(Document, document_id)
     if not doc:
@@ -191,11 +198,11 @@ def save_revision(
 
     content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
     head = _current_head(session, document_id)
-    if head and head.content_hash == content_hash:
+    if head and head.content_hash == content_hash and head.format == format:
         return head  # no change, don't create a duplicate
 
     rev = _create_revision_inner(
-        session, document_id, content, ai_score=ai_score, note=note
+        session, document_id, content, ai_score=ai_score, note=note, format=format
     )
     doc.current_revision_id = rev.id
     doc.updated_at = int(time.time() * 1000)
@@ -223,7 +230,8 @@ def restore_revision(
     session: Session, document_id: str, revision_id: str
 ) -> Optional[Revision]:
     """Make an old revision the current HEAD by appending a new revision
-    with the same content and a restore note."""
+    with the same content and a restore note.  Preserves the original
+    format so restoring a ProseMirror revision keeps its rich-text shape."""
     target = session.get(Revision, revision_id)
     if not target or target.document_id != document_id:
         return None
@@ -233,6 +241,7 @@ def restore_revision(
         target.content,
         ai_score=target.ai_score,
         note=f"Restored from {revision_id[:8]}",
+        format=target.format,
     )
 
 

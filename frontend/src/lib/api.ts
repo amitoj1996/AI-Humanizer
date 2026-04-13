@@ -83,7 +83,12 @@ export const api = {
     get<Revision[]>(`/api/documents/${docId}/revisions`),
   saveRevision: (
     docId: string,
-    req: { content: string; ai_score?: number; note?: string },
+    req: {
+      content: string;
+      format?: "text" | "prosemirror";
+      ai_score?: number;
+      note?: string;
+    },
   ) => post<Revision>(`/api/documents/${docId}/revisions`, req),
   restoreRevision: (docId: string, revId: string) =>
     post<Revision>(

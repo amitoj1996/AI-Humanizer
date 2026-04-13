@@ -13,9 +13,21 @@ import type {
 export type AppTab = "detect" | "humanize";
 export type LoadingKind = "detect" | "humanize" | null;
 
+// ProseMirror JSON document.  We don't need to type the content nodes
+// strictly here — Tiptap's JSONContent is the source of truth at the
+// editor boundary and the rest of the app just round-trips this opaquely
+// (via JSON.stringify for the revision save path).
+export type ProseMirrorDoc = {
+  type: "doc";
+  content?: unknown[];
+  attrs?: Record<string, unknown>;
+  marks?: unknown[];
+};
+
 type AppState = {
   // Input
-  text: string;
+  text: string;                     // plain-text projection (detect/humanize)
+  documentJson: ProseMirrorDoc | null; // canonical rich doc (revisions/replay)
   // UI controls
   activeTab: AppTab;
   strength: Strength;
@@ -36,6 +48,9 @@ type AppState = {
   ollamaAvailable: boolean | null;
   // Setters
   setText: (t: string) => void;
+  setDocumentJson: (j: ProseMirrorDoc | null) => void;
+  /** Replace both text + json atomically (used by doc load / restore). */
+  loadContent: (text: string, json: ProseMirrorDoc | null) => void;
   setActiveTab: (t: AppTab) => void;
   setStrength: (s: Strength) => void;
   setTone: (t: Tone) => void;
@@ -55,6 +70,7 @@ type AppState = {
 
 export const useAppStore = create<AppState>((set) => ({
   text: "",
+  documentJson: null,
   activeTab: "detect",
   strength: "medium",
   tone: "general",
@@ -70,6 +86,8 @@ export const useAppStore = create<AppState>((set) => ({
   selectedModel: "",
   ollamaAvailable: null,
   setText: (text) => set({ text }),
+  setDocumentJson: (documentJson) => set({ documentJson }),
+  loadContent: (text, documentJson) => set({ text, documentJson }),
   setActiveTab: (activeTab) => set({ activeTab }),
   setStrength: (strength) => set({ strength }),
   setTone: (tone) => set({ tone }),

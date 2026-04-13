@@ -110,11 +110,14 @@ export type Document = {
   updated_at: number;
 };
 
+export type RevisionFormat = "text" | "prosemirror";
+
 export type Revision = {
   id: string;
   document_id: string;
   parent_id: string | null;
   content: string;
+  format: RevisionFormat;
   content_hash: string;
   ai_score: number | null;
   note: string | null;

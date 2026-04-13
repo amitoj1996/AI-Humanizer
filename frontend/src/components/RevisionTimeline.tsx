@@ -1,8 +1,22 @@
 "use client";
 
 import { recorder } from "../lib/provenance";
+import type { Revision } from "../lib/types";
 import { useAppStore } from "../store/app";
 import { useDocumentsStore } from "../store/documents";
+
+/** Hydrate `loadContent(text, json)` from a Revision, respecting its format. */
+function contentFromRevision(rev: Revision): { text: string; json: { type: "doc"; content?: unknown[] } | null } {
+  if (rev.format === "prosemirror") {
+    try {
+      return { text: "", json: JSON.parse(rev.content) };
+    } catch {
+      // Falls back to surfacing raw bytes so the user doesn't lose the row.
+      return { text: rev.content, json: null };
+    }
+  }
+  return { text: rev.content, json: null };
+}
 
 function formatTime(ms: number): string {
   const date = new Date(ms);
@@ -18,7 +32,7 @@ function formatTime(ms: number): string {
 
 export function RevisionTimeline() {
   const { currentDocumentId, currentRevisions, restoreRevision } = useDocumentsStore();
-  const { setText, clearResults } = useAppStore();
+  const { loadContent, clearResults } = useAppStore();
 
   if (!currentDocumentId || currentRevisions.length === 0) return null;
 
@@ -26,15 +40,17 @@ export function RevisionTimeline() {
     if (!currentDocumentId) return;
     if (!confirm("Restore this revision? This creates a new revision with the old content.")) return;
     const restored = await restoreRevision(currentDocumentId, revId);
-    setText(restored.content);
+    const { text, json } = contentFromRevision(restored);
+    loadContent(text, json);
     // Provenance: a restore appends a new revision with the old content;
     // it's a user-intent event, so include it in the writing history.
     recorder.revisionSaved(restored.id, restored.ai_score);
     clearResults();
   };
 
-  const handlePreview = (content: string) => {
-    setText(content);
+  const handlePreview = (rev: Revision) => {
+    const { text, json } = contentFromRevision(rev);
+    loadContent(text, json);
     clearResults();
   };
 
@@ -74,7 +90,7 @@ export function RevisionTimeline() {
             </div>
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
-                onClick={() => handlePreview(rev.content)}
+                onClick={() => handlePreview(rev)}
                 className="text-xs text-blue-400 hover:text-blue-300 px-1"
               >
                 View

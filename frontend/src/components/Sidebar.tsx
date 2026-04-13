@@ -22,7 +22,7 @@ export function Sidebar() {
     deleteDocument,
   } = useDocumentsStore();
 
-  const { setText, clearResults } = useAppStore();
+  const { loadContent, clearResults } = useAppStore();
   const [creatingProject, setCreatingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
 
@@ -42,13 +42,29 @@ export function Sidebar() {
     await recorder.attachToDocument(docId);
     const doc = await selectDocument(docId);
     if (doc?.current_revision_id) {
-      // Pull the current revision content into the editor
+      // Pull the current revision content into the editor.  ProseMirror
+      // revisions hydrate the editor from JSON (preserves headings, marks,
+      // lists); plain-text revisions come in as the raw string.
       const revs = useDocumentsStore.getState().currentRevisions;
       const currentRev = revs.find((r) => r.id === doc.current_revision_id);
-      if (currentRev) setText(currentRev.content);
-      else setText("");
+      if (!currentRev) {
+        loadContent("", null);
+      } else if (currentRev.format === "prosemirror") {
+        try {
+          const json = JSON.parse(currentRev.content);
+          // Plain-text projection is set to "" — the editor's onUpdate will
+          // overwrite it with the hydrated text on the next render.
+          loadContent("", json);
+        } catch {
+          // Stored format claims prosemirror but content isn't valid JSON.
+          // Surface the raw string so the user can recover their content.
+          loadContent(currentRev.content, null);
+        }
+      } else {
+        loadContent(currentRev.content, null);
+      }
     } else {
-      setText("");
+      loadContent("", null);
     }
   };
 

@@ -23,6 +23,7 @@ class DocumentCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     source_type: str = Field(default="blank")
     initial_content: Optional[str] = None
+    initial_format: str = Field(default="text", pattern="^(text|prosemirror)$")
 
 
 class DocumentRead(BaseModel):
@@ -42,6 +43,7 @@ class DocumentRename(BaseModel):
 # ---- Revisions ----
 class RevisionCreate(BaseModel):
     content: str
+    format: str = Field(default="text", pattern="^(text|prosemirror)$")
     ai_score: Optional[float] = None
     note: Optional[str] = None
 
@@ -51,6 +53,7 @@ class RevisionRead(BaseModel):
     document_id: str
     parent_id: Optional[str]
     content: str
+    format: str
     content_hash: str
     ai_score: Optional[float]
     note: Optional[str]
