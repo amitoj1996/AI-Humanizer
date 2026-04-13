@@ -29,9 +29,18 @@ class ProvenanceRecorder {
   private flushing = false;
   private startingSession: Promise<string | null> | null = null;
 
+  /** Exposed for the beforeunload handler, which needs to pick up the
+   *  active session synchronously to send a beacon. */
+  get currentSessionId(): string | null {
+    return this.sessionId;
+  }
+
   async attachToDocument(documentId: string): Promise<void> {
     if (this.documentId === documentId) return;
-    await this.flush();   // flush anything pending from the previous doc
+    // Seal the previous session before swapping — flushes pending events,
+    // writes the final_hash, and marks the session as ended.  Leaves the
+    // previous chain permanently verifiable.
+    await this.seal();
     this.detach();
     this.documentId = documentId;
 
@@ -182,3 +191,23 @@ class ProvenanceRecorder {
 
 // Process-wide singleton — one recorder per app window.
 export const recorder = new ProvenanceRecorder();
+
+// Seal on window unload so closing the app / reloading the tab always ends
+// the current session cleanly.  We use `sendBeacon` via a keepalive fetch
+// to the seal endpoint — regular fetch() promises don't survive `beforeunload`.
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
+    const sessionId = recorder.currentSessionId;
+    if (!sessionId) return;
+    try {
+      const url = `${
+        process.env.NEXT_PUBLIC_API_BASE ?? ""
+      }/api/sessions/${sessionId}/seal`;
+      // Blob body so sendBeacon sends as POST with JSON content-type
+      const blob = new Blob(["{}"], { type: "application/json" });
+      navigator.sendBeacon(url, blob);
+    } catch {
+      // non-fatal
+    }
+  });
+}

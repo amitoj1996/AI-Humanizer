@@ -1,15 +1,6 @@
 import random
 import re
 
-import nltk
-
-# Ensure NLTK data is available
-for pkg in ("wordnet", "punkt_tab", "averaged_perceptron_tagger"):
-    try:
-        nltk.data.find(f"corpora/{pkg}" if pkg == "wordnet" else f"tokenizers/{pkg}" if "punkt" in pkg else f"taggers/{pkg}")
-    except LookupError:
-        nltk.download(pkg, quiet=True)
-
 
 class TextPostProcessor:
     """Rule-based transformations that disrupt the statistical fingerprints

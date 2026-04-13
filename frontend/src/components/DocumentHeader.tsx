@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { recorder } from "../lib/provenance";
 import { useAppStore } from "../store/app";
 import { useDocumentsStore } from "../store/documents";
 import { ExportMenu } from "./ExportMenu";
@@ -35,7 +36,10 @@ export function DocumentHeader() {
 
   const handleSave = async () => {
     if (!text.trim()) return;
-    await saveRevision(doc.id, text);
+    const rev = await saveRevision(doc.id, text);
+    // Provenance: record the manual save so the writing-process report
+    // shows user-driven checkpoints, not just detect/humanize events.
+    recorder.revisionSaved(rev.id, rev.ai_score);
   };
 
   return (

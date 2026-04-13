@@ -1,7 +1,14 @@
-"""Pytest fixtures — mock out the heavy models so tests run fast.
+"""Pytest fixtures — mock out the heavy models so tests run fast AND offline.
 
-Pattern: override `get_registry` with a FakeRegistry that provides lightweight
-stub services.  No PyTorch / HuggingFace / sentence-transformers get loaded.
+Critical design point: FastAPI's lifespan runs when `TestClient(app)` is first
+used, BEFORE `app.dependency_overrides` takes effect.  If we rely only on
+overrides, the lifespan's `get_registry().initialise()` loads the real 2 GB
+of models (and fails on a fresh / offline machine).
+
+Fix: install a FakeRegistry via `set_test_registry()` at module-import time.
+The FakeRegistry is already "initialised" (its __init__ creates the stubs),
+so `initialise()` is a no-op.  Both the lifespan and the request handlers
+see the fake.  No model loading, no network.
 """
 from __future__ import annotations
 
@@ -85,6 +92,7 @@ class FakePipeline:
             "total_iterations": 1,
             "mode": "full-text",
             "similarity_score": 0.95,
+            "preserved_spans": 0,
         }
 
     async def humanize_sentences(self, text: str, **kwargs) -> dict:
@@ -97,10 +105,14 @@ class FakePipeline:
             "total_sentences": 1,
             "mode": "sentence-level",
             "similarity_score": 0.92,
+            "preserved_spans": 0,
         }
 
 
 class FakeRegistry:
+    """A ServiceRegistry shape with no real models.  Already-initialised by
+    construction so `initialise()` becomes a no-op when the lifespan fires."""
+
     def __init__(self) -> None:
         self.detector = FakeDetector()
         self.sentence_detector = FakeSentenceDetector(self.detector)
@@ -115,35 +127,19 @@ class FakeRegistry:
 
 
 # ---------------------------------------------------------------------------
-# FastAPI TestClient with overridden dependencies
+# Module-level: install fake registry BEFORE any test imports `app.main`,
+# so the lifespan triggered by TestClient sees the fake and does no work.
 # ---------------------------------------------------------------------------
-@pytest.fixture
-def fake_registry() -> FakeRegistry:
-    return FakeRegistry()
+_GLOBAL_FAKE_REGISTRY = FakeRegistry()
 
-
-@pytest.fixture(autouse=True)
-def _isolated_db(tmp_path, monkeypatch):
-    """Each test gets a fresh SQLite file in a tmp dir.  No app data polluted."""
-    db_file = tmp_path / "test.db"
-    monkeypatch.setenv("AI_HUMANIZER_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("AI_HUMANIZER_DB_PATH", str(db_file))
-
-    # Reset cached engine so it picks up the new path
-    from app.db import connection
-
-    connection.reset_engine()
-    connection.init_db()
-    yield
-    connection.reset_engine()
-
-
-@pytest.fixture
-def client(fake_registry, monkeypatch):
-    """TestClient with mocked services.  Use this in every test."""
-    # Monkey-patch OllamaRewriter globally so humanize endpoint doesn't actually
-    # try to hit localhost:11434
+# Monkey-patch the Ollama rewriter at module import time too — humanize
+# endpoint calls it outside of request-handler dependency injection, so
+# dependency_overrides can't help us there.
+def _install_module_patches() -> None:
+    from app import deps
     from app.humanizer import rewriter as rewriter_mod
+
+    deps.set_test_registry(_GLOBAL_FAKE_REGISTRY)
 
     async def fake_check_available(self):
         return True
@@ -154,14 +150,46 @@ def client(fake_registry, monkeypatch):
     async def fake_rewrite(self, text, **kwargs):
         return text
 
-    monkeypatch.setattr(rewriter_mod.OllamaRewriter, "check_available", fake_check_available)
-    monkeypatch.setattr(rewriter_mod.OllamaRewriter, "list_models", fake_list_models)
-    monkeypatch.setattr(rewriter_mod.OllamaRewriter, "rewrite", fake_rewrite)
+    rewriter_mod.OllamaRewriter.check_available = fake_check_available
+    rewriter_mod.OllamaRewriter.list_models = fake_list_models
+    rewriter_mod.OllamaRewriter.rewrite = fake_rewrite
 
-    # Import after monkeypatch so any module-level init uses the fakes
+
+_install_module_patches()
+
+
+# ---------------------------------------------------------------------------
+# Per-test DB isolation
+# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _isolated_db(tmp_path, monkeypatch):
+    db_file = tmp_path / "test.db"
+    monkeypatch.setenv("AI_HUMANIZER_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("AI_HUMANIZER_DB_PATH", str(db_file))
+
+    from app.db import connection
+
+    connection.reset_engine()
+    connection.init_db()
+    yield
+    connection.reset_engine()
+
+
+# ---------------------------------------------------------------------------
+# TestClient — the FakeRegistry is already installed, no model loading
+# ---------------------------------------------------------------------------
+@pytest.fixture
+def fake_registry() -> FakeRegistry:
+    return _GLOBAL_FAKE_REGISTRY
+
+
+@pytest.fixture
+def client(fake_registry):
     from app import deps
     from app.main import app
 
+    # Per-request dependency overrides (still useful — they let individual
+    # tests swap in narrower fakes if they want).
     app.dependency_overrides[deps.get_registry] = lambda: fake_registry
     app.dependency_overrides[deps.get_detector] = lambda: fake_registry.detector
     app.dependency_overrides[deps.get_sentence_detector] = lambda: fake_registry.sentence_detector

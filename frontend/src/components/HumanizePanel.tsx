@@ -9,6 +9,11 @@ import { useAppStore } from "../store/app";
 import { useDocumentsStore } from "../store/documents";
 import { SimilarityBadge } from "./SimilarityBadge";
 
+// After a humanize, we want the editor to show the humanized text so
+// document HEAD, the visible editor, and any subsequent manual "Save Revision"
+// click stay in sync.  Without this the user can silently overwrite HEAD
+// with the pre-humanized text by pressing Save Revision next.
+
 const STRENGTHS: Strength[] = ["light", "medium", "aggressive"];
 const TONES: Tone[] = ["general", "academic", "casual", "blog", "professional"];
 
@@ -22,6 +27,7 @@ export function HumanizeControls() {
     preserveCitations,
     loading,
     error,
+    setText,
     setStrength,
     setTone,
     setMode,
@@ -51,6 +57,11 @@ export function HumanizeControls() {
       });
       setHumanizeResult(res);
 
+      // Keep the editor in sync with the new document HEAD.  Prevents a
+      // subsequent "Save Revision" from overwriting the humanized revision
+      // with the stale pre-humanize text.
+      setText(res.humanized);
+
       recorder.aiRewriteApplied({
         beforeText: text,
         afterText: res.humanized,
@@ -79,7 +90,7 @@ export function HumanizeControls() {
     } finally {
       setLoading(null);
     }
-  }, [text, strength, tone, mode, preserveCitations, clearResults, setLoading, setHumanizeResult, setError]);
+  }, [text, strength, tone, mode, preserveCitations, clearResults, setText, setLoading, setHumanizeResult, setError]);
 
   return (
     <>

@@ -120,6 +120,40 @@ def test_sealed_session_rejects_events(client):
     assert r.status_code == 400
 
 
+def test_tampered_final_hash_is_caught(client):
+    """Post-seal: if someone flips final_hash in the DB, verify must fail
+    even though the event chain itself is still internally consistent."""
+    from app.db.connection import get_engine
+    from app.db.models import ProvenanceSession
+    from sqlmodel import Session
+
+    doc_id = _make_doc(client)
+    session_id = _start_session(client, doc_id)
+    client.post(
+        f"/api/sessions/{session_id}/events",
+        json={"events": [{"event_type": "typed", "timestamp": 1, "payload": {}}]},
+    )
+    client.post(f"/api/sessions/{session_id}/seal")
+
+    # Before tamper: verification passes
+    before = client.get(f"/api/sessions/{session_id}/verify").json()
+    assert before["valid"] is True
+
+    # Flip the stored final_hash directly in the DB (simulating tamper that
+    # leaves the event chain untouched but swaps the sealed terminal hash).
+    engine = get_engine()
+    with Session(engine) as s:
+        ps = s.get(ProvenanceSession, session_id)
+        assert ps is not None
+        ps.final_hash = "0" * 64
+        s.add(ps)
+        s.commit()
+
+    after = client.get(f"/api/sessions/{session_id}/verify").json()
+    assert after["valid"] is False
+    assert "final_hash" in (after["reason"] or "")
+
+
 def test_tamper_detection(client):
     """If someone edits a payload in the DB, verification must fail."""
     from app.db.connection import get_engine

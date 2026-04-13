@@ -78,6 +78,49 @@ def test_import_md(client):
     assert r.json()["source_type"] == "md"
 
 
+def test_import_docx_preserves_paragraph_table_order(client):
+    """Regression: paragraph-table-paragraph layouts must not be re-ordered."""
+    doc = Document()
+    doc.add_paragraph("First paragraph before the table.")
+    table = doc.add_table(rows=2, cols=2)
+    table.rows[0].cells[0].text = "H1"
+    table.rows[0].cells[1].text = "H2"
+    table.rows[1].cells[0].text = "A"
+    table.rows[1].cells[1].text = "B"
+    doc.add_paragraph("Second paragraph after the table.")
+    buf = io.BytesIO()
+    doc.save(buf)
+    content = buf.getvalue()
+
+    project_id = _create_project(client)
+    r = client.post(
+        "/api/documents/import",
+        data={"project_id": project_id},
+        files={
+            "file": (
+                "mixed.docx",
+                content,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+    assert r.status_code == 200
+    doc_id = r.json()["document_id"]
+
+    full = client.get(f"/api/documents/{doc_id}").json()
+    rev = client.get(
+        f"/api/documents/{doc_id}/revisions/{full['current_revision_id']}"
+    ).json()
+    text = rev["content"]
+
+    before_idx = text.index("First paragraph")
+    table_idx = text.index("H1")
+    after_idx = text.index("Second paragraph")
+    assert before_idx < table_idx < after_idx, (
+        "DOCX body order lost: paragraphs reordered around table"
+    )
+
+
 def test_import_docx_preserves_headings(client):
     project_id = _create_project(client)
     content = _make_docx(

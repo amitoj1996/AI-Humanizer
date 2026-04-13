@@ -1,5 +1,6 @@
 "use client";
 
+import { recorder } from "../lib/provenance";
 import { useAppStore } from "../store/app";
 import { useDocumentsStore } from "../store/documents";
 
@@ -26,6 +27,9 @@ export function RevisionTimeline() {
     if (!confirm("Restore this revision? This creates a new revision with the old content.")) return;
     const restored = await restoreRevision(currentDocumentId, revId);
     setText(restored.content);
+    // Provenance: a restore appends a new revision with the old content;
+    // it's a user-intent event, so include it in the writing history.
+    recorder.revisionSaved(restored.id, restored.ai_score);
     clearResults();
   };
 

@@ -204,7 +204,24 @@ def verify_session_chain(
         }
         for e in events
     ]
-    return chain.verify_chain(ps.genesis_hash, dicts)
+    result = chain.verify_chain(ps.genesis_hash, dicts)
+    if not result.valid:
+        return result
+
+    # Sealed sessions: the stored `final_hash` must equal the chain's last
+    # self_hash (or the genesis hash for an empty sealed session).  Without
+    # this check a post-seal DB edit that left the event chain internally
+    # consistent but flipped `final_hash` would go undetected.
+    if ps.ended_at is not None:
+        expected_final = events[-1].self_hash if events else ps.genesis_hash
+        if ps.final_hash != expected_final:
+            return chain.VerificationResult(
+                valid=False,
+                total_events=len(events),
+                broken_at=events[-1].sequence if events else -1,
+                reason="final_hash does not match computed terminal hash",
+            )
+    return result
 
 
 # ---------------------------------------------------------------------------
