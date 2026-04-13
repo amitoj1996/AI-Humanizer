@@ -6,6 +6,9 @@ import { api } from "../lib/api";
 import { recorder } from "../lib/provenance";
 import type { ProvenanceReport as Report } from "../lib/types";
 import { useDocumentsStore } from "../store/documents";
+import { ReplayTimeline } from "./ReplayTimeline";
+
+type Tab = "summary" | "replay";
 
 function formatTime(ms: number): string {
   return new Date(ms).toLocaleString();
@@ -33,6 +36,7 @@ function eventColor(type: string): string {
 export function ProvenanceReport() {
   const { currentDocumentId } = useDocumentsStore();
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<Tab>("summary");
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -73,24 +77,50 @@ export function ProvenanceReport() {
             onClick={(e) => e.stopPropagation()}
             className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col"
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-              <div>
-                <h2 className="text-lg font-semibold">Writing Process Report</h2>
-                <p className="text-xs text-zinc-500">
-                  Tamper-evident local record · SHA-256 chain
-                </p>
+            <div className="px-6 py-4 border-b border-zinc-800">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Writing Process Report</h2>
+                  <p className="text-xs text-zinc-500">
+                    Tamper-evident local record · SHA-256 chain
+                  </p>
+                </div>
+                <button
+                  onClick={() => setOpen(false)}
+                  className="text-zinc-500 hover:text-zinc-300 text-lg"
+                >
+                  ✕
+                </button>
               </div>
-              <button
-                onClick={() => setOpen(false)}
-                className="text-zinc-500 hover:text-zinc-300 text-lg"
-              >
-                ✕
-              </button>
+              {/* Tabs */}
+              <div className="flex gap-1 mt-3">
+                {(
+                  [
+                    ["summary", "Summary"],
+                    ["replay", "Authoring Replay"],
+                  ] as [Tab, string][]
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => setTab(id)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      tab === id
+                        ? "bg-zinc-800 text-white"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {loading && <p className="text-sm text-zinc-500">Loading…</p>}
-              {!loading && report && (
+              {tab === "replay" && <ReplayTimeline />}
+              {tab === "summary" && loading && (
+                <p className="text-sm text-zinc-500">Loading…</p>
+              )}
+              {tab === "summary" && !loading && report && (
                 <>
                   {/* Chain integrity */}
                   <div
@@ -221,7 +251,7 @@ export function ProvenanceReport() {
                   </div>
                 </>
               )}
-              {!loading && !report && (
+              {tab === "summary" && !loading && !report && (
                 <p className="text-sm text-zinc-500">No activity recorded yet.</p>
               )}
             </div>

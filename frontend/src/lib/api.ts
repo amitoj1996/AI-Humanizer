@@ -8,6 +8,7 @@ import type {
   ProvenanceEvent,
   ProvenanceReport,
   ProvenanceSession,
+  ReplayData,
   Revision,
   SentenceDetectionResult,
 } from "./types";
@@ -106,6 +107,8 @@ export const api = {
     post<ProvenanceSession>(`/api/sessions/${sessionId}/seal`, {}),
   getReport: (documentId: string) =>
     get<ProvenanceReport>(`/api/documents/${documentId}/provenance/report`),
+  getReplay: (documentId: string) =>
+    get<ReplayData>(`/api/documents/${documentId}/provenance/replay`),
 
   // ---- Import / Export ----
   importDocument: async (

@@ -151,6 +151,42 @@ export type ProvenanceSession = {
   final_hash: string | null;
 };
 
+export type ReplaySnapshot = {
+  timestamp: number;
+  kind: string; // "revision" | "ai_rewrite" | "ai_rewrite+revision" | ...
+  source_id: string;
+  content: string;
+  ai_score: number | null;
+  ai_score_before?: number | null;
+  strength?: string;
+  tone?: string;
+  mode?: string;
+  note?: string | null;
+  chars: number;
+  merged_source_ids?: string[];
+};
+
+export type ReplayAnnotation = {
+  timestamp: number;
+  event_type: string;
+  payload: Record<string, unknown>;
+  sequence: number;
+  session_id: string;
+};
+
+export type ReplayData = {
+  document_id: string;
+  document_title: string;
+  snapshots: ReplaySnapshot[];
+  annotations: ReplayAnnotation[];
+  totals: {
+    snapshots: number;
+    events: number;
+    revisions: number;
+    span_ms: number;
+  };
+};
+
 export type ProvenanceReport = {
   document_id: string;
   document_title: string;

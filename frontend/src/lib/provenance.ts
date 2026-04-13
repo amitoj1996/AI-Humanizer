@@ -87,7 +87,6 @@ class ProvenanceRecorder {
     // with backoff) before we get here; if it still couldn't flush, we
     // log and drop rather than corrupt.
     if (this.queue.length > 0) {
-      // eslint-disable-next-line no-console
       console.warn(
         `Discarding ${this.queue.length} undelivered provenance events ` +
           `from session ${this.sessionId} — seal() retries exhausted.`,
@@ -222,7 +221,6 @@ class ProvenanceRecorder {
       // Best-effort: log a warning but proceed.  In practice this only
       // fires if the local backend is unreachable for >600 ms, which is
       // extraordinary for a local desktop app.
-      // eslint-disable-next-line no-console
       console.warn(
         `Sealing session ${this.sessionId} with ${this.queue.length} undelivered events`,
       );

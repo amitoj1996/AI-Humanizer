@@ -302,6 +302,124 @@ def test_seal_without_body_still_works(client):
     assert r.json()["ended_at"] is not None
 
 
+def test_replay_builds_snapshots_from_revisions_and_rewrites(client):
+    """Replay turns each revision AND each ai_rewrite_applied event into a
+    navigable snapshot, sorted by timestamp."""
+    # Build a doc with initial content, then an AI rewrite, then another save
+    p = client.post("/api/projects", json={"name": "P"}).json()
+    doc = client.post(
+        "/api/documents",
+        json={"project_id": p["id"], "title": "Replay Test", "initial_content": "draft v1"},
+    ).json()
+    doc_id = doc["id"]
+
+    # Start a session, emit a rewrite event, save another revision
+    s = client.post("/api/sessions", json={"document_id": doc_id}).json()
+    client.post(
+        f"/api/sessions/{s['id']}/events",
+        json={
+            "events": [
+                {"event_type": "typed", "timestamp": 100, "payload": {"text": "hi", "char_count": 2}},
+                {"event_type": "ai_rewrite_applied", "timestamp": 200, "payload": {
+                    "before_text": "draft v1",
+                    "after_text": "polished draft",
+                    "strength": "medium",
+                    "tone": "general",
+                    "mode": "full",
+                    "ai_score_before": 0.8,
+                    "ai_score_after": 0.2,
+                }},
+            ]
+        },
+    )
+    client.post(
+        f"/api/documents/{doc_id}/revisions",
+        json={"content": "hand-edited final", "ai_score": 0.15},
+    )
+
+    r = client.get(f"/api/documents/{doc_id}/provenance/replay")
+    assert r.status_code == 200
+    result = r.json()
+
+    # The replay should have snapshots (ordered by timestamp), plus the
+    # non-snapshot events (typed) as annotations.
+    snapshots = result["snapshots"]
+    contents = [s["content"] for s in snapshots]
+    # Initial revision, rewrite output, final revision — all three distinct
+    assert "draft v1" in contents
+    assert "polished draft" in contents
+    assert "hand-edited final" in contents
+
+    # Rewrite snapshot carries the strength/tone metadata
+    rewrite = next(s for s in snapshots if s["content"] == "polished draft")
+    assert rewrite["strength"] == "medium"
+    assert rewrite["ai_score_before"] == 0.8
+    assert rewrite["ai_score"] == 0.2
+
+    # typed event lands in annotations, not snapshots
+    annot_types = {a["event_type"] for a in result["annotations"]}
+    assert "typed" in annot_types
+
+    # Totals
+    assert result["totals"]["revisions"] >= 2
+    assert result["totals"]["snapshots"] >= 2
+
+
+def test_replay_dedupes_identical_adjacent_content(client):
+    """After an ai_rewrite_applied, HumanizePanel saves the same text as a
+    revision too.  The replay should collapse those into one snapshot with
+    merged metadata rather than show the user a duplicate frame."""
+    import time
+
+    p = client.post("/api/projects", json={"name": "P"}).json()
+    doc = client.post(
+        "/api/documents",
+        json={"project_id": p["id"], "title": "Dedup Test", "initial_content": "original"},
+    ).json()
+    doc_id = doc["id"]
+    s = client.post("/api/sessions", json={"document_id": doc_id}).json()
+
+    # Use a timestamp AFTER the initial revision's created_at (which is
+    # now_ms() at create_document time), otherwise sort order puts the
+    # rewrite before the initial revision and no dedup chance exists.
+    future_ts = int(time.time() * 1000) + 10_000
+
+    client.post(
+        f"/api/sessions/{s['id']}/events",
+        json={
+            "events": [{
+                "event_type": "ai_rewrite_applied",
+                "timestamp": future_ts,
+                "payload": {
+                    "before_text": "original",
+                    "after_text": "polished",
+                    "strength": "medium",
+                    "tone": "general",
+                    "mode": "full",
+                    "ai_score_before": 0.8,
+                    "ai_score_after": 0.2,
+                },
+            }]
+        },
+    )
+    # Immediately save a revision with the same post-rewrite content
+    client.post(
+        f"/api/documents/{doc_id}/revisions",
+        json={"content": "polished", "ai_score": 0.2},
+    )
+
+    r = client.get(f"/api/documents/{doc_id}/provenance/replay").json()
+    polished = [s for s in r["snapshots"] if s["content"] == "polished"]
+    # Only one snapshot for "polished" — the revision merged into the rewrite
+    assert len(polished) == 1, f"Expected merged dedup, got {len(polished)} frames"
+    assert "+" in polished[0]["kind"]  # combined kind label
+
+
+def test_replay_requires_document(client):
+    r = client.get("/api/documents/nonexistent/provenance/replay")
+    assert r.status_code == 404
+
+
 def test_get_active_session(client):
     doc_id = _make_doc(client)
     # No active session yet

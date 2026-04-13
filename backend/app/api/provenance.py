@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from ..db.connection import get_session
+from ..provenance import replay as replay_module
 from ..provenance import service
 from ..schemas.provenance import (
     EventRead,
@@ -122,3 +123,15 @@ def provenance_report(
     if not report:
         raise HTTPException(status_code=404, detail="Document not found")
     return report
+
+
+@router.get("/documents/{document_id}/provenance/replay")
+def provenance_replay(
+    document_id: str, session: Session = Depends(get_session)
+):
+    """Scrubbable authoring history — revisions + AI rewrites as snapshots,
+    everything else as timeline annotations."""
+    result = replay_module.build_replay(session, document_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return result

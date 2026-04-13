@@ -38,5 +38,35 @@
     "id": "voice_memo_transcript_01",
     "source": "synthetic conversational transcript",
     "text": "Yeah so uh, I talked to the contractor and he said the earliest they can start is mid-May, which, whatever, we can work with that. But the quote went up like fifteen percent from what he said in January, and I'm not thrilled about that. I asked him about it and he kind of shrugged, said materials, which, fine, but still. I'm going to get one more estimate before we sign anything. It's annoying but it's a lot of money."
+  },
+  {
+    "id": "gutenberg_twain_01",
+    "source": "The Adventures of Huckleberry Finn, Mark Twain (Project Gutenberg, public domain)",
+    "text": "You don't know about me without you have read a book by the name of The Adventures of Tom Sawyer; but that ain't no matter. That book was made by Mr. Mark Twain, and he told the truth, mainly. There was things which he stretched, but mainly he told the truth. That is nothing. I never seen anybody but lied one time or another, without it was Aunt Polly, or the widow, or maybe Mary."
+  },
+  {
+    "id": "casual_email_to_friend_01",
+    "source": "synthetic casual email",
+    "text": "hey just wanted to check in, i know you mentioned the move was rough and i've been thinking about you. no pressure to reply, just wanted to say i'm around if you want to talk or grab dinner or whatever. the place near my apartment is doing half off pasta on tuesdays, which feels like a sign. anyway. hope you're doing ok. miss you."
+  },
+  {
+    "id": "github_issue_comment_01",
+    "source": "synthetic GH issue comment style",
+    "text": "yeah i can repro this on macOS 14.5 with python 3.13. happens about 1 in 4 runs, looks like a race in the cleanup path — the engine gets disposed while a connection is still being checked back in. i think the fix is to await the connection.close() before the dispose. happy to send a PR if you want, want to make sure i'm not missing something obvious first."
+  },
+  {
+    "id": "field_notes_01",
+    "source": "synthetic researcher field notes",
+    "text": "Tried the new protocol with the second cohort today. They mostly got it but two participants asked for clarification on step 3 — I think the wording is unclear, will revise. No incidents to report. Building was way too cold again, which is going to skew the comfort ratings if we're not careful. Next session is Thursday, I'll bring the backup recorder this time after what happened last week."
+  },
+  {
+    "id": "diary_entry_01",
+    "source": "synthetic personal diary",
+    "text": "Long day. Couldn't sleep last night thinking about the conversation with M, kept replaying it. I don't think I said the wrong thing exactly, but I could've said the right thing better. Going to text her tomorrow, not today, give it some space. Made the dough for cinnamon rolls before bed, at least there's that to look forward to."
+  },
+  {
+    "id": "pet_owner_post_01",
+    "source": "synthetic forum post",
+    "text": "Anyone else's senior cat suddenly become obsessed with sitting in the bathroom sink? Mine is 14 and has never cared about the sink in his life, then last week he just started flopping in there every morning while I'm trying to brush my teeth. Vet says he's fine, blood work normal. He just looks so smug about it. I don't know what to tell you. Sending pictures because honestly that's the only reason I'm posting."
   }
 ]
