@@ -487,6 +487,27 @@ Authorship and Turnitin's Authorship Dashboard, but local.
 
 ---
 
+## ⚠️ Known interim limitation (Phase 9 / Tiptap)
+
+The editor is now ProseMirror-based, but the **app's data model still
+round-trips plain text only**.
+
+- You can use Markdown shortcuts in the editor (`# heading`, `**bold**`,
+  `- list`, `> quote`, `` ` ` `` for code) and they render correctly
+  *while you're typing*.
+- But on **save / detect / humanize / document switch / restore**, all
+  formatting is stripped. The editor state goes through `editor.getText()`
+  before hitting the store, the backend, and revisions.
+- Net effect: you can create a heading, but next time you open the
+  document it's just a plain paragraph.
+
+This is a deliberate v1 trade-off to ship the editor without a schema
+migration. The next phase is to extend `Revision.content` to hold
+ProseMirror JSON (with a `format` column for backwards compat) so
+formatting survives the round-trip end-to-end.
+
+---
+
 ## Phase 9 candidates — what's next, in priority order
 
 These three are the remaining serious work. Browser extension and code

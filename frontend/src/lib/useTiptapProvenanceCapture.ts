@@ -6,19 +6,23 @@
  * far cleaner signal than DOM `beforeinput` — IME, undo/redo, drag-drop,
  * and structural changes all surface as the same primitive.
  *
- * Classification per step:
- *   ReplaceStep with non-empty slice + zero deletion  → typed (or pasted)
- *   ReplaceStep with empty slice + non-zero deletion  → deleted
- *   AddMarkStep / RemoveMarkStep                      → ignored (formatting)
+ * What this hook ignores (does NOT record):
+ *   - Programmatic writes (setContent from doc-load, restore, post-humanize).
+ *     Caller passes a ref flag we check synchronously inside the handler.
+ *     Without this, every document switch counterfeits a "user typed the
+ *     whole doc just now" event.
+ *   - Undo/redo transactions.  Recorded as `manual_edit` annotations
+ *     instead of `typed`/`deleted` so they don't inflate authorship counts.
+ *   - Pure formatting changes (AddMark / RemoveMark).
  *
- * Paste vs type:  ProseMirror sets `tr.getMeta('paste')` for paste-origin
- * transactions (and `tr.getMeta('uiEvent') === 'paste'` in some versions).
- * We check both for compatibility.
- *
- * Burst aggregation: contiguous `typed` steps within 1 s of each other
- * collapse into a single `typed` event so we don't spam the chain with
- * one-event-per-keystroke.
+ * Step classification:
+ *   ReplaceStep with size N inserted, M deleted → both `typed` (or
+ *     `pasted`) for N AND `deleted` for M.  Logging the FULL deletion is
+ *     correct for replace-overwrite (e.g. select-all then paste).  The
+ *     previous net-difference logic under-counted deletions on common
+ *     editing patterns.
  */
+import type { RefObject } from "react";
 import { useEffect } from "react";
 
 import type { Editor } from "@tiptap/react";
@@ -28,7 +32,10 @@ import { recorder } from "./provenance";
 
 const TYPE_BURST_IDLE_MS = 1_000;
 
-export function useTiptapProvenanceCapture(editor: Editor | null): void {
+export function useTiptapProvenanceCapture(
+  editor: Editor | null,
+  programmaticUpdateRef?: RefObject<boolean>,
+): void {
   useEffect(() => {
     if (!editor) return;
 
@@ -49,24 +56,32 @@ export function useTiptapProvenanceCapture(editor: Editor | null): void {
     const handleTransaction = ({ transaction: tr }: { transaction: Transaction }) => {
       if (!tr.docChanged) return;
 
+      // ---- Filters: skip transactions that aren't authentic user authorship.
+      // 1. Programmatic writes — the component sets a ref flag before calling
+      //    setContent, clears after a microtask.  Without this we'd record
+      //    "user typed the entire document" on every doc switch, restore, or
+      //    post-humanize sync.
+      if (programmaticUpdateRef?.current) return;
+      // 2. Tiptap's own preventUpdate flag (set by emitUpdate: false) — same
+      //    intent, belt-and-braces in case the ref window is narrowly missed.
+      if (tr.getMeta("preventUpdate") === true) return;
+      // 3. Anything that explicitly opts out of history / authorship logging.
+      if (tr.getMeta("addToHistory") === false) return;
+
       const isPaste =
         tr.getMeta("paste") === true || tr.getMeta("uiEvent") === "paste";
-      // History (undo/redo) generates structural transactions we don't want
-      // to count as fresh user keystrokes — surface as manual_edit instead.
       const isHistory =
         tr.getMeta("history$") !== undefined ||
-        tr.getMeta("addToHistory") === false;
+        tr.getMeta("y-sync$") !== undefined; // Yjs collab if we ever add it
 
       let totalInserted = "";
       let totalDeletedSize = 0;
 
       for (const step of tr.steps) {
-        // ProseMirror Step is a base class; we care about ReplaceStep + ReplaceAroundStep
         const stepJson = step.toJSON() as {
           stepType: string;
           from?: number;
           to?: number;
-          slice?: { content?: unknown[] };
         };
         if (
           stepJson.stepType !== "replace" &&
@@ -74,13 +89,18 @@ export function useTiptapProvenanceCapture(editor: Editor | null): void {
         )
           continue;
 
-        // Extract inserted text via the step's slice; deleted size from from/to.
-        // We use the mapped ranges via `getMap()` for ReplaceStep; here we
-        // rely on the slice's textBetween when content is present.
-        const sliceObj = (step as unknown as { slice?: { size: number; content: { textBetween: (a: number, b: number, sep?: string) => string } } }).slice;
-        const insertedText = sliceObj && sliceObj.size > 0
-          ? sliceObj.content.textBetween(0, sliceObj.size, "\n")
-          : "";
+        const sliceObj = (
+          step as unknown as {
+            slice?: {
+              size: number;
+              content: { textBetween: (a: number, b: number, sep?: string) => string };
+            };
+          }
+        ).slice;
+        const insertedText =
+          sliceObj && sliceObj.size > 0
+            ? sliceObj.content.textBetween(0, sliceObj.size, "\n")
+            : "";
         const from = stepJson.from ?? 0;
         const to = stepJson.to ?? 0;
         const deletedSize = Math.max(0, to - from);
@@ -89,46 +109,39 @@ export function useTiptapProvenanceCapture(editor: Editor | null): void {
         totalDeletedSize += deletedSize;
       }
 
+      // History (undo/redo): the original typed/deleted events that produced
+      // the prior state are already on the chain.  Re-issuing typed/deleted
+      // here would double-count and weaken the integrity story.  Surface as
+      // a `manual_edit` annotation so the report still shows the user took
+      // an action.
       if (isHistory) {
-        // Treat undo/redo as a manual edit annotation — gives us a
-        // navigable marker without inflating typed/pasted counts.
-        if (totalInserted || totalDeletedSize) {
-          flushBurst();
-          recorder.deleted(totalDeletedSize);
-          if (totalInserted)
-            recorder.typed(totalInserted); // counts as re-typed via undo
-        }
+        flushBurst();
+        recorder.manualEdit({
+          source: "history",
+          inserted_chars: totalInserted.length,
+          deleted_chars: totalDeletedSize,
+        });
         return;
+      }
+
+      // Always log the full deletion size first if there was any.  This
+      // covers select-and-replace patterns (paste-overwrite, type-overwrite)
+      // accurately — the previous net-difference logic under-counted them.
+      if (totalDeletedSize > 0) {
+        flushBurst();
+        recorder.deleted(totalDeletedSize);
       }
 
       if (isPaste && totalInserted) {
         flushBurst();
         recorder.pasted(totalInserted, "external");
-        if (totalDeletedSize > totalInserted.length) {
-          // selection-replace paste: count the net deletion
-          recorder.deleted(totalDeletedSize - totalInserted.length);
-        }
         return;
       }
 
-      // Pure deletion (no insertion text)
-      if (!totalInserted && totalDeletedSize > 0) {
-        flushBurst();
-        recorder.deleted(totalDeletedSize);
-        return;
-      }
-
-      // Typed insertion (possibly with selection-replace which acts like
-      // a quick-overwrite — we count both halves)
       if (totalInserted) {
         burstBuffer += totalInserted;
         if (burstTimer) clearTimeout(burstTimer);
         burstTimer = setTimeout(flushBurst, TYPE_BURST_IDLE_MS);
-
-        if (totalDeletedSize > totalInserted.length) {
-          flushBurst();
-          recorder.deleted(totalDeletedSize - totalInserted.length);
-        }
       }
     };
 
@@ -145,5 +158,5 @@ export function useTiptapProvenanceCapture(editor: Editor | null): void {
       editor.off("transaction", handleTransaction);
       editor.off("blur", handleBlur);
     };
-  }, [editor]);
+  }, [editor, programmaticUpdateRef]);
 }

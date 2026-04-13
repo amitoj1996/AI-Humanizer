@@ -207,6 +207,10 @@ class ProvenanceRecorder {
     this.enqueue("imported", { source, char_count: charCount });
   }
 
+  manualEdit(payload: Record<string, unknown>): void {
+    this.enqueue("manual_edit", payload);
+  }
+
   /** Seal the current session, retrying flush on failure so we don't lose
    *  the tail of a session to a transient hiccup. */
   async seal(): Promise<void> {
