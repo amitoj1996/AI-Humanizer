@@ -3,6 +3,7 @@ import re
 import httpx
 
 from ..config import OLLAMA_BASE_URL, OLLAMA_MODEL
+from . import preserve
 
 # ---- Tone-specific system prompts ----
 TONE_SYSTEM_PROMPTS = {
@@ -82,6 +83,8 @@ class OllamaRewriter:
         tone: str = "general",
     ) -> str:
         system = TONE_SYSTEM_PROMPTS.get(tone, TONE_SYSTEM_PROMPTS["general"])
+        if preserve.has_placeholders(text):
+            system = f"{system}\n\n{preserve.placeholder_prompt_note()}"
         prompt = REWRITE_PROMPTS.get(strength, REWRITE_PROMPTS["medium"]).format(
             text=text
         )

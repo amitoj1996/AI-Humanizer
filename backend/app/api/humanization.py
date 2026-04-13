@@ -27,6 +27,7 @@ async def humanize_text(
             tone=req.tone,
             candidates_per_sentence=req.candidates_per_sentence,
             target_score=req.target_score,
+            preserve_citations=req.preserve_citations,
         )
     return await pipeline.humanize(
         req.text,
@@ -34,4 +35,5 @@ async def humanize_text(
         tone=req.tone,
         max_iterations=req.max_iterations,
         target_score=req.target_score,
+        preserve_citations=req.preserve_citations,
     )

@@ -1,6 +1,7 @@
 import re
 
 from ..detector.ensemble import EnsembleDetector
+from . import preserve
 from .postprocess import TextPostProcessor
 from .rewriter import OllamaRewriter
 from .similarity import SimilarityChecker
@@ -40,13 +41,21 @@ class HumanizationPipeline:
         tone: str = "general",
         max_iterations: int = 3,
         target_score: float = 0.35,
+        preserve_citations: bool = True,
     ) -> dict:
         intensity_map = {"light": 0.3, "medium": 0.5, "aggressive": 0.8}
         intensity = intensity_map.get(strength, 0.5)
 
         initial_detection = self.detector.detect(text)
 
-        current_text = text
+        # Protect citations / quotes / code / LaTeX.  We work on the
+        # placeholdered version for the whole loop; restore at the end.
+        if preserve_citations:
+            working_text, preserved = preserve.protect(text)
+        else:
+            working_text, preserved = text, []
+
+        current_text = working_text
         current_strength = strength
         iterations = []
 
@@ -56,7 +65,10 @@ class HumanizationPipeline:
             )
             processed = self.postprocessor.process(rewritten, intensity=intensity)
             processed = self.structural.rewrite(processed, intensity=intensity)
-            detection = self.detector.detect(processed)
+            # Score the restored (placeholder-free) version so the detection
+            # signal reflects what the user actually sees.
+            scoreable = preserve.restore(processed, preserved)
+            detection = self.detector.detect(scoreable)
 
             iterations.append(
                 {
@@ -81,20 +93,22 @@ class HumanizationPipeline:
             ]
             intensity = min(1.0, intensity + 0.15)
 
-        final_detection = self.detector.detect(current_text)
+        final_text = preserve.restore(current_text, preserved)
+        final_detection = self.detector.detect(final_text)
 
         result = {
             "original": text,
-            "humanized": current_text,
+            "humanized": final_text,
             "detection_before": initial_detection,
             "detection_after": final_detection,
             "iterations": iterations,
             "total_iterations": len(iterations),
             "mode": "full-text",
+            "preserved_spans": len(preserved),
         }
 
         if self.similarity:
-            result["similarity_score"] = self.similarity.score(text, current_text)
+            result["similarity_score"] = self.similarity.score(text, final_text)
 
         return result
 
@@ -108,16 +122,19 @@ class HumanizationPipeline:
         tone: str = "general",
         candidates_per_sentence: int = 3,
         target_score: float = 0.35,
+        preserve_citations: bool = True,
     ) -> dict:
         intensity_map = {"light": 0.3, "medium": 0.5, "aggressive": 0.8}
         intensity = intensity_map.get(strength, 0.5)
 
         initial_detection = self.detector.detect(text)
+
         sentences = re.split(r"(?<=[.!?])\s+", text)
         sentences = [s.strip() for s in sentences if s.strip()]
 
         humanized_sentences = []
         sentence_details = []
+        total_preserved = 0
 
         for sent in sentences:
             word_count = len(sent.split())
@@ -137,9 +154,17 @@ class HumanizationPipeline:
                 )
                 continue
 
+            # Protect spans per-sentence so placeholders map back inside
+            # the same sentence after rewriting.
+            if preserve_citations:
+                protected_sent, sent_preserved = preserve.protect(sent)
+                total_preserved += len(sent_preserved)
+            else:
+                protected_sent, sent_preserved = sent, []
+
             original_score = self.detector.detect(sent)["ai_score"]
 
-            # Generate multiple candidates, pick the best
+            # Generate multiple candidates, pick the best (score after restore).
             best_text = sent
             best_score = original_score
             tested = 0
@@ -147,20 +172,19 @@ class HumanizationPipeline:
             for _ in range(candidates_per_sentence):
                 try:
                     rewritten = await self.rewriter.rewrite(
-                        sent, strength=strength, tone=tone
+                        protected_sent, strength=strength, tone=tone
                     )
                     processed = self.postprocessor.process(rewritten, intensity=intensity)
-                    # Only apply structural rewriting to candidates individually
-                    # if the sentence is long enough
                     if len(processed.split()) > 12:
                         processed = self.structural.rewrite(processed, intensity=intensity * 0.5)
 
-                    score = self.detector.detect(processed)["ai_score"]
+                    restored = preserve.restore(processed, sent_preserved)
+                    score = self.detector.detect(restored)["ai_score"]
                     tested += 1
 
                     if score < best_score:
                         best_score = score
-                        best_text = processed
+                        best_text = restored
                 except Exception:
                     continue
 
@@ -187,6 +211,7 @@ class HumanizationPipeline:
             "sentence_details": sentence_details,
             "total_sentences": len(sentences),
             "mode": "sentence-level",
+            "preserved_spans": total_preserved,
         }
 
         if self.similarity:

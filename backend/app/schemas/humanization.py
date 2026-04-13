@@ -11,6 +11,10 @@ class HumanizeRequest(BaseModel):
     target_score: float = Field(0.35, ge=0.0, le=1.0)
     mode: str = Field("sentence", pattern="^(full|sentence)$")
     candidates_per_sentence: int = Field(3, ge=1, le=5)
+    preserve_citations: bool = Field(
+        True,
+        description="Keep citations, quotes, code blocks, and LaTeX exactly as written.",
+    )
 
 
 class ModelSelectRequest(BaseModel):

@@ -22,6 +22,7 @@ type AppState = {
   tone: Tone;
   mode: Mode;
   detectionMode: DetectionMode;
+  preserveCitations: boolean;
   // Results
   detection: DetectionResult | null;
   sentenceDetection: SentenceDetectionResult | null;
@@ -40,6 +41,7 @@ type AppState = {
   setTone: (t: Tone) => void;
   setMode: (m: Mode) => void;
   setDetectionMode: (d: DetectionMode) => void;
+  setPreserveCitations: (p: boolean) => void;
   setDetection: (d: DetectionResult | null) => void;
   setSentenceDetection: (d: SentenceDetectionResult | null) => void;
   setHumanizeResult: (d: HumanizeResult | null) => void;
@@ -58,6 +60,7 @@ export const useAppStore = create<AppState>((set) => ({
   tone: "general",
   mode: "sentence",
   detectionMode: "sentences",
+  preserveCitations: true,
   detection: null,
   sentenceDetection: null,
   humanizeResult: null,
@@ -72,6 +75,7 @@ export const useAppStore = create<AppState>((set) => ({
   setTone: (tone) => set({ tone }),
   setMode: (mode) => set({ mode }),
   setDetectionMode: (detectionMode) => set({ detectionMode }),
+  setPreserveCitations: (preserveCitations) => set({ preserveCitations }),
   setDetection: (detection) => set({ detection }),
   setSentenceDetection: (sentenceDetection) => set({ sentenceDetection }),
   setHumanizeResult: (humanizeResult) => set({ humanizeResult }),

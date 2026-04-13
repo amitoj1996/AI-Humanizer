@@ -19,11 +19,13 @@ export function HumanizeControls() {
     strength,
     tone,
     mode,
+    preserveCitations,
     loading,
     error,
     setStrength,
     setTone,
     setMode,
+    setPreserveCitations,
     setHumanizeResult,
     setLoading,
     setError,
@@ -45,6 +47,7 @@ export function HumanizeControls() {
         tone,
         mode,
         candidates_per_sentence: 3,
+        preserve_citations: preserveCitations,
       });
       setHumanizeResult(res);
 
@@ -76,7 +79,7 @@ export function HumanizeControls() {
     } finally {
       setLoading(null);
     }
-  }, [text, strength, tone, mode, clearResults, setLoading, setHumanizeResult, setError]);
+  }, [text, strength, tone, mode, preserveCitations, clearResults, setLoading, setHumanizeResult, setError]);
 
   return (
     <>
@@ -138,6 +141,22 @@ export function HumanizeControls() {
           </button>
         ))}
       </div>
+
+      {/* Preserve citations toggle */}
+      <label className="flex items-center gap-3 cursor-pointer select-none pt-1">
+        <input
+          type="checkbox"
+          checked={preserveCitations}
+          onChange={(e) => setPreserveCitations(e.target.checked)}
+          className="w-4 h-4 rounded border-zinc-600 bg-zinc-900 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+        />
+        <div className="flex-1">
+          <div className="text-sm text-zinc-300">Preserve citations &amp; quotes</div>
+          <div className="text-xs text-zinc-500">
+            Keep [Smith 2024], &quot;quotes&quot;, code, and LaTeX exactly as written
+          </div>
+        </div>
+      </label>
 
       <button
         onClick={run}

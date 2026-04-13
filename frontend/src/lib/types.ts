@@ -89,6 +89,7 @@ export type HumanizeRequest = {
   candidates_per_sentence?: number;
   max_iterations?: number;
   target_score?: number;
+  preserve_citations?: boolean;
 };
 
 // ---- Documents ----
