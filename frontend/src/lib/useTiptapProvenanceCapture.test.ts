@@ -89,8 +89,9 @@ describe("useTiptapProvenanceCapture", () => {
     editor.commands.insertContent("b".repeat(20));
     flushBurstWindow();
 
-    const totalDeleted = deletedSpy.mock.calls.reduce(
-      (sum, args) => sum + (args[0] as number),
+    const deletedCalls = deletedSpy.mock.calls as unknown as number[][];
+    const totalDeleted = deletedCalls.reduce(
+      (sum, args) => sum + (args[0] ?? 0),
       0,
     );
     // ProseMirror's positional coordinate space counts paragraph
@@ -100,8 +101,9 @@ describe("useTiptapProvenanceCapture", () => {
     // the fix.
     expect(totalDeleted).toBeGreaterThanOrEqual(20);
     expect(totalDeleted).toBeLessThan(30);
-    const totalTyped = typedSpy.mock.calls.reduce(
-      (sum, args) => sum + (args[0] as string).length,
+    const typedCalls = typedSpy.mock.calls as unknown as string[][];
+    const totalTyped = typedCalls.reduce(
+      (sum, args) => sum + (args[0]?.length ?? 0),
       0,
     );
     expect(totalTyped).toBe(20);
@@ -150,6 +152,14 @@ describe("useTiptapProvenanceCapture", () => {
     expect(pastedSpy).not.toHaveBeenCalled();
     expect(deletedSpy).not.toHaveBeenCalled();
     expect(manualEditSpy).not.toHaveBeenCalled();
+  });
+
+  it("non-programmatic transactions DO record (proves the flag is checked, not always-true)", () => {
+    // attachHook(false) is the default, but make it explicit here.
+    attachHook(false);
+    editor.commands.insertContent("normal typing");
+    flushBurstWindow();
+    expect(typedSpy).toHaveBeenCalledWith("normal typing");
   });
 
   it("paste meta routes to recorder.pasted, not typed", () => {

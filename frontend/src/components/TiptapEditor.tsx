@@ -96,12 +96,23 @@ export function TiptapEditor() {
       // both the ref AND the meta are checked by the provenance hook.
       const payload: Content = targetIsJson ? (documentJson as JSONContent) : text;
       editor.commands.setContent(payload, { emitUpdate: false });
+
+      // emitUpdate:false suppresses our onUpdate callback, so the plain-text
+      // projection in the store wouldn't refresh on its own.  Sync it here
+      // so detect/humanize/word-count have the correct input on the very
+      // next render — without this, opening or restoring a ProseMirror
+      // revision left `text` empty even though the editor visually showed
+      // the loaded content.
+      if (targetIsJson) {
+        const projected = editor.getText();
+        if (projected !== text) setText(projected);
+      }
     } finally {
       queueMicrotask(() => {
         programmaticUpdateRef.current = false;
       });
     }
-  }, [editor, text, documentJson]);
+  }, [editor, text, documentJson, setText]);
 
   // Tiptap docs: render null until the editor is initialised on the
   // client to avoid SSR hydration mismatches.

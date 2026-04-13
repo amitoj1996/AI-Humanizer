@@ -445,6 +445,38 @@ def test_replay_does_not_dedupe_resaves_of_same_content(client):
     )
 
 
+def test_replay_decodes_prosemirror_revision_to_plain_text(client):
+    """Phase 10 regression: a prosemirror-format revision must surface as
+    readable prose in the replay, not as raw JSON characters."""
+    p = client.post("/api/projects", json={"name": "P"}).json()
+    doc = client.post(
+        "/api/documents", json={"project_id": p["id"], "title": "PM Replay"}
+    ).json()
+    pm_json = (
+        '{"type":"doc","content":['
+        '{"type":"heading","attrs":{"level":1},'
+        '"content":[{"type":"text","text":"My Heading"}]},'
+        '{"type":"paragraph","content":[{"type":"text","text":"Body sentence."}]}'
+        "]}"
+    )
+    client.post(
+        f"/api/documents/{doc['id']}/revisions",
+        json={"content": pm_json, "format": "prosemirror"},
+    )
+
+    r = client.get(f"/api/documents/{doc['id']}/provenance/replay").json()
+    rev_snap = next(s for s in r["snapshots"] if s["kind"] == "revision")
+    # Decoded — no raw JSON braces or "type":"doc" leaking through.
+    assert "My Heading" in rev_snap["content"]
+    assert "Body sentence." in rev_snap["content"]
+    assert "{" not in rev_snap["content"]
+    assert '"type"' not in rev_snap["content"]
+    # And `chars` reflects the decoded text length, not the JSON length.
+    assert rev_snap["chars"] == len(rev_snap["content"])
+    # Format flag exposed so the frontend can render appropriately.
+    assert rev_snap["format"] == "prosemirror"
+
+
 def test_replay_does_not_dedupe_distant_rewrite_and_revision(client):
     """A rewrite from yesterday and a manual save with identical content
     today must remain distinct frames — same content alone isn't enough

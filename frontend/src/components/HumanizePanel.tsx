@@ -27,7 +27,7 @@ export function HumanizeControls() {
     preserveCitations,
     loading,
     error,
-    setText,
+    loadContent,
     setStrength,
     setTone,
     setMode,
@@ -57,10 +57,13 @@ export function HumanizeControls() {
       });
       setHumanizeResult(res);
 
-      // Keep the editor in sync with the new document HEAD.  Prevents a
-      // subsequent "Save Revision" from overwriting the humanized revision
-      // with the stale pre-humanize text.
-      setText(res.humanized);
+      // Keep the editor in sync with the new document HEAD.  Use
+      // loadContent (not setText alone) to ALSO clear the stale
+      // documentJson — without that, the editor's effect would prefer the
+      // pre-humanize JSON over the new plain text and you'd see the old
+      // content while HEAD pointed at the humanized one.  setText alone is
+      // what created the split-brain bug.
+      loadContent(res.humanized, null);
 
       recorder.aiRewriteApplied({
         beforeText: text,
@@ -93,7 +96,7 @@ export function HumanizeControls() {
     } finally {
       setLoading(null);
     }
-  }, [text, strength, tone, mode, preserveCitations, clearResults, setText, setLoading, setHumanizeResult, setError]);
+  }, [text, strength, tone, mode, preserveCitations, clearResults, loadContent, setLoading, setHumanizeResult, setError]);
 
   return (
     <>

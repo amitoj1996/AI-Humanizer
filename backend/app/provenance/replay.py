@@ -28,6 +28,7 @@ from typing import Any, Optional
 from sqlmodel import Session, select
 
 from ..db.models import Document, ProvenanceEvent, Revision
+from ..services import prosemirror as pm
 
 # How close in time an `ai_rewrite_applied` and a `revision_saved` with
 # identical content have to be for them to count as the same checkpoint.
@@ -60,17 +61,23 @@ def build_replay(session: Session, document_id: str) -> dict:
 
     snapshots: list[dict[str, Any]] = []
 
-    # 1. Every revision is a definite snapshot.
+    # 1. Every revision is a definite snapshot.  ProseMirror revisions are
+    #    decoded to plain text via the same walker the export path uses, so
+    #    the replay timeline shows readable prose instead of leaking raw
+    #    JSON to the user.
     for rev in revisions:
+        rev_format = getattr(rev, "format", "text")
+        plain = pm.to_plain_text(rev.content, format=rev_format)
         snapshots.append(
             {
                 "timestamp": rev.created_at,
                 "kind": "revision",
                 "source_id": rev.id,
-                "content": rev.content,
+                "content": plain,
+                "format": rev_format,
                 "ai_score": rev.ai_score,
                 "note": rev.note,
-                "chars": len(rev.content),
+                "chars": len(plain),
             }
         )
 
