@@ -47,9 +47,12 @@ test("create project, create doc, detect AI text, humanize", async ({ page }) =>
   await expect(page.getByRole("heading", { name: "E2E Doc" })).toBeVisible();
 
   // ----- Type into editor -----
-  const editor = page.getByPlaceholder("Paste your text here...");
+  // The editor is a Tiptap contenteditable, not a textarea, so we use
+  // `pressSequentially` (types char-by-char, fires real input events) and
+  // query by aria-placeholder since `getByPlaceholder` matches the attr.
+  const editor = page.getByRole("textbox");
   await editor.click();
-  await editor.fill(AI_TEXT);
+  await page.keyboard.insertText(AI_TEXT);
   await expect(page.getByText(/\d+ words/)).toBeVisible();
 
   // ----- Detection -----
@@ -89,8 +92,9 @@ test("writing report modal opens and shows chain integrity", async ({ page }) =>
   await expect(page.getByRole("heading", { name: "Report Doc" })).toBeVisible();
 
   // Type something so provenance has events to report on
-  const editor = page.getByPlaceholder("Paste your text here...");
-  await editor.fill("This is some typed content for the provenance report.");
+  const editor = page.getByRole("textbox");
+  await editor.click();
+  await page.keyboard.insertText("This is some typed content for the provenance report.");
   // Give the recorder its flush interval
   await page.waitForTimeout(2500);
 

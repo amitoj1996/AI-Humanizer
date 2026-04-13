@@ -36,3 +36,19 @@ body {
 textarea:focus {
   outline: none;
 }
+
+/* Tiptap placeholder — shown when the editor is empty.
+   The Placeholder extension adds .is-editor-empty + a data-placeholder
+   attribute on the first node; we render it as faint zinc text so it
+   matches the textarea-era look. */
+.tiptap p.is-editor-empty:first-child::before {
+  color: #52525b; /* zinc-600 */
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.tiptap:focus {
+  outline: none;
+}
