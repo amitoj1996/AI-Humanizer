@@ -7,3 +7,11 @@ transformers>=4.45.0
 nltk==3.9.1
 numpy>=1.24.0
 sentence-transformers>=3.0.0
+
+# Desktop launcher
+pywebview>=6.1
+cairosvg>=2.7.1
+
+# Testing
+pytest>=8.3
+pytest-asyncio>=0.24
