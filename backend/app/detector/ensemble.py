@@ -10,7 +10,9 @@ class EnsembleDetector:
     def __init__(self):
         print("  Loading RoBERTa classifier...")
         self.classifier = AIClassifier()
-        print("  Loading Qwen 3.5 for perplexity analysis...")
+        from ..config import PERPLEXITY_MODEL
+
+        print(f"  Loading {PERPLEXITY_MODEL} for perplexity analysis...")
         self.perplexity_analyzer = PerplexityAnalyzer()
         self.linguistic_analyzer = LinguisticAnalyzer()
         print("  All detector models loaded.")

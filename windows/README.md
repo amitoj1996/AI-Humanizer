@@ -13,6 +13,33 @@ Models (Qwen 3.5, RoBERTa, sentence-transformers) are **not bundled** — they'r
 downloaded on first launch to the user's HuggingFace cache. That keeps the
 installer ~1.5–2 GB instead of 4+ GB.
 
+## Model profiles (Ollama)
+
+Verified against official releases as of April 2026. Pull the model you
+want and select it from the app's Models dropdown.
+
+| Profile | Model | Size (Q4_K_M) | Notes |
+|---|---|---|---|
+| **Default** (Balanced) | `qwen3.5:9b` | 6.6 GB | Fits on a single 8 GB GPU (e.g. RTX 3070). Ollama keeps single-GPU-fit models on one card for best latency. |
+| **Fast** | `qwen3.5:4b` | 3.4 GB | Snappier UI, leaves room for concurrent detector work on the same GPU. |
+| **Reasoning** (optional) | `deepseek-r1:8b` | 5.2 GB | Better analytical rewriting; reasoning traces can push style harder than pure rewriters. |
+| **Quality experiment** | `mistral-small3.2:24b` | 15 GB | Will span both GPUs on dual-8 GB setups — worse latency, best raw quality. |
+| **Skip** | `llama4` (67 GB min) | — | Too big for this hardware tier. |
+
+Pull the default after install:
+
+```powershell
+ollama pull qwen3.5:9b
+```
+
+Override defaults via environment variables (e.g. on CPU-only machines
+where a 4 B-param perplexity model is too slow per sentence):
+
+```powershell
+$env:AI_HUMANIZER_OLLAMA_MODEL     = "qwen3.5:4b"
+$env:AI_HUMANIZER_PERPLEXITY_MODEL = "Qwen/Qwen3.5-0.8B"
+```
+
 ## Building
 
 ### Via GitHub Actions (recommended)

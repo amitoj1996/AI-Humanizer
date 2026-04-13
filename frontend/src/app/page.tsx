@@ -51,8 +51,8 @@ export default function Home() {
 
       <footer className="border-t border-zinc-800 px-6 py-2">
         <p className="text-center text-xs text-zinc-600">
-          Runs 100% locally · RoBERTa + Qwen 3.5 detection · Sentence-level adversarial
-          humanization · Ollama LLM rewriting
+          Runs 100% locally · RoBERTa + Qwen 3.5-4B detection · Sentence-level adversarial
+          humanization · Ollama (qwen3.5:9b default) rewriting
         </p>
       </footer>
     </div>
