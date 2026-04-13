@@ -11,7 +11,13 @@ from typing import Optional
 
 from sqlmodel import Session, select
 
-from ..db.models import Document, Project, Revision
+from ..db.models import (
+    Document,
+    Project,
+    ProvenanceEvent,
+    ProvenanceSession,
+    Revision,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -40,21 +46,44 @@ def delete_project(session: Session, project_id: str) -> bool:
     if not project:
         return False
 
-    # Cascade delete: documents + revisions for this project.  We do this
-    # explicitly (rather than via FK ON DELETE CASCADE) because SQLAlchemy's
-    # ORM-level relationships require us to either wire cascade= on the model
-    # or delete children ourselves.  Explicit is clearer.
+    # Cascade delete: documents + revisions + provenance for this project.
+    # Explicit (rather than FK ON DELETE CASCADE) — clearer in code review
+    # and avoids SQLAlchemy relationship config for a simple case.
     docs = session.exec(
         select(Document).where(Document.project_id == project_id)
     ).all()
     for doc in docs:
-        session.exec(
-            Revision.__table__.delete().where(Revision.document_id == doc.id)
-        )
+        _delete_document_cascade(session, doc.id)
         session.delete(doc)
     session.delete(project)
     session.commit()
     return True
+
+
+def _delete_document_cascade(session: Session, document_id: str) -> None:
+    """Remove all dependent rows for a document.  Caller commits."""
+    # Clear Document.current_revision_id before deleting revisions so the FK
+    # self-reference on the row being deleted doesn't throw.
+    doc = session.get(Document, document_id)
+    if doc:
+        doc.current_revision_id = None
+        session.add(doc)
+        session.flush()
+
+    # Provenance events → sessions → revisions
+    session.exec(
+        ProvenanceEvent.__table__.delete().where(
+            ProvenanceEvent.document_id == document_id
+        )
+    )
+    session.exec(
+        ProvenanceSession.__table__.delete().where(
+            ProvenanceSession.document_id == document_id
+        )
+    )
+    session.exec(
+        Revision.__table__.delete().where(Revision.document_id == document_id)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -112,9 +141,7 @@ def delete_document(session: Session, document_id: str) -> bool:
     doc = session.get(Document, document_id)
     if not doc:
         return False
-    session.exec(
-        Revision.__table__.delete().where(Revision.document_id == document_id)
-    )
+    _delete_document_cascade(session, document_id)
     session.delete(doc)
     session.commit()
     return True

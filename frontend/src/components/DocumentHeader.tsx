@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { useAppStore } from "../store/app";
 import { useDocumentsStore } from "../store/documents";
+import { ProvenanceReport } from "./ProvenanceReport";
 
 export function DocumentHeader() {
   const {
@@ -62,13 +63,16 @@ export function DocumentHeader() {
           {doc.title}
         </h2>
       )}
-      <button
-        onClick={handleSave}
-        disabled={!text.trim()}
-        className="text-xs px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:cursor-not-allowed"
-      >
-        Save Revision
-      </button>
+      <div className="flex items-center gap-2">
+        <ProvenanceReport />
+        <button
+          onClick={handleSave}
+          disabled={!text.trim()}
+          className="text-xs px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:cursor-not-allowed"
+        >
+          Save Revision
+        </button>
+      </div>
     </div>
   );
 }

@@ -58,3 +58,31 @@ class Revision(SQLModel, table=True):
     ai_score: Optional[float] = None
     note: Optional[str] = None
     created_at: int = Field(default_factory=_now_ms, index=True)
+
+
+# ---------------------------------------------------------------------------
+# Provenance — tamper-evident writing-process log
+# ---------------------------------------------------------------------------
+class ProvenanceSession(SQLModel, table=True):
+    __tablename__ = "provenance_sessions"
+
+    id: str = Field(default_factory=_uuid, primary_key=True)
+    document_id: str = Field(foreign_key="documents.id", index=True)
+    started_at: int = Field(default_factory=_now_ms)
+    ended_at: Optional[int] = None  # null = still active
+    genesis_hash: str  # 32 random bytes hex-encoded, seeds the chain
+    final_hash: Optional[str] = None  # last event's self_hash after sealing
+
+
+class ProvenanceEvent(SQLModel, table=True):
+    __tablename__ = "provenance_events"
+
+    id: str = Field(default_factory=_uuid, primary_key=True)
+    session_id: str = Field(foreign_key="provenance_sessions.id", index=True)
+    document_id: str = Field(index=True)
+    sequence: int  # monotonic within a session, unique per session
+    event_type: str
+    timestamp: int
+    payload: str  # canonical JSON blob
+    prev_hash: str
+    self_hash: str

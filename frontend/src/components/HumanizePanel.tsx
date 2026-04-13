@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 
 import { api } from "../lib/api";
+import { recorder } from "../lib/provenance";
 import type { Mode, Strength, Tone } from "../lib/types";
 import { useAppStore } from "../store/app";
 import { useDocumentsStore } from "../store/documents";
@@ -36,6 +37,7 @@ export function HumanizeControls() {
     }
     clearResults();
     setLoading("humanize");
+    recorder.aiRewriteRequested(strength, tone, mode);
     try {
       const res = await api.humanize({
         text,
@@ -46,10 +48,20 @@ export function HumanizeControls() {
       });
       setHumanizeResult(res);
 
+      recorder.aiRewriteApplied({
+        beforeText: text,
+        afterText: res.humanized,
+        strength,
+        tone,
+        mode,
+        aiScoreBefore: res.detection_before.ai_score,
+        aiScoreAfter: res.detection_after.ai_score,
+      });
+
       // Auto-save humanized output as a new revision
       const docId = useDocumentsStore.getState().currentDocumentId;
       if (docId) {
-        await useDocumentsStore
+        const rev = await useDocumentsStore
           .getState()
           .saveRevision(
             docId,
@@ -57,6 +69,7 @@ export function HumanizeControls() {
             res.detection_after.ai_score,
             `Humanized (${strength}/${tone}/${mode})`,
           );
+        recorder.revisionSaved(rev.id, res.detection_after.ai_score);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Humanization failed");

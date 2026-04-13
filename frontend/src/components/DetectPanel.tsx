@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 
 import { api } from "../lib/api";
+import { recorder } from "../lib/provenance";
 import { useAppStore } from "../store/app";
 import { useDocumentsStore } from "../store/documents";
 import { BreakdownCard } from "./BreakdownCard";
@@ -34,19 +35,28 @@ export function DetectControls() {
     setLoading("detect");
     try {
       let aiScore: number | undefined;
+      let verdict = "";
       if (detectionMode === "sentences") {
         const result = await api.detectSentences(text);
         setSentenceDetection(result);
         aiScore = result.overall.ai_score;
+        verdict = result.overall.verdict;
       } else {
         const result = await api.detect(text);
         setDetection(result);
         aiScore = result.ai_score;
+        verdict = result.verdict;
+      }
+      if (aiScore !== undefined) {
+        recorder.detectionRun(aiScore, verdict, detectionMode);
       }
       // Auto-save revision snapshot of current text with AI score attached
       const docId = useDocumentsStore.getState().currentDocumentId;
       if (docId && aiScore !== undefined) {
-        await useDocumentsStore.getState().saveRevision(docId, text, aiScore, "After detection");
+        const rev = await useDocumentsStore
+          .getState()
+          .saveRevision(docId, text, aiScore, "After detection");
+        recorder.revisionSaved(rev.id, aiScore);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Detection failed");

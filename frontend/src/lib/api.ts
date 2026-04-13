@@ -5,6 +5,9 @@ import type {
   HumanizeResult,
   ModelsResponse,
   Project,
+  ProvenanceEvent,
+  ProvenanceReport,
+  ProvenanceSession,
   Revision,
   SentenceDetectionResult,
 } from "./types";
@@ -86,4 +89,21 @@ export const api = {
       `/api/documents/${docId}/revisions/${revId}/restore`,
       {},
     ),
+
+  // ---- Provenance ----
+  startSession: (documentId: string) =>
+    post<ProvenanceSession>("/api/sessions", { document_id: documentId }),
+  getActiveSession: (documentId: string) =>
+    get<ProvenanceSession | null>(
+      `/api/documents/${documentId}/active-session`,
+    ),
+  appendEvents: (sessionId: string, events: ProvenanceEvent[]) =>
+    post<{ appended: number; error: string | null }>(
+      `/api/sessions/${sessionId}/events`,
+      { events },
+    ),
+  sealSession: (sessionId: string) =>
+    post<ProvenanceSession>(`/api/sessions/${sessionId}/seal`, {}),
+  getReport: (documentId: string) =>
+    get<ProvenanceReport>(`/api/documents/${documentId}/provenance/report`),
 };

@@ -55,7 +55,8 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
   deleteProject: async (id) => {
     await api.deleteProject(id);
     const projects = get().projects.filter((p) => p.id !== id);
-    const { [id]: _, ...docsByProject } = get().documentsByProject;
+    const docsByProject = { ...get().documentsByProject };
+    delete docsByProject[id];
     set({
       projects,
       documentsByProject: docsByProject,

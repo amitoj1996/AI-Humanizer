@@ -119,3 +119,65 @@ export type Revision = {
   note: string | null;
   created_at: number;
 };
+
+// ---- Provenance ----
+export type ProvenanceEventType =
+  | "session_start"
+  | "session_end"
+  | "typed"
+  | "pasted"
+  | "deleted"
+  | "imported"
+  | "ai_rewrite_requested"
+  | "ai_rewrite_applied"
+  | "ai_rewrite_rejected"
+  | "detection_run"
+  | "revision_saved"
+  | "manual_edit";
+
+export type ProvenanceEvent = {
+  event_type: ProvenanceEventType;
+  timestamp: number;
+  payload: Record<string, unknown>;
+};
+
+export type ProvenanceSession = {
+  id: string;
+  document_id: string;
+  started_at: number;
+  ended_at: number | null;
+  genesis_hash: string;
+  final_hash: string | null;
+};
+
+export type ProvenanceReport = {
+  document_id: string;
+  document_title: string;
+  sessions: {
+    session_id: string;
+    started_at: number;
+    ended_at: number | null;
+    valid: boolean;
+    events: number;
+    final_hash: string | null;
+    genesis_hash: string;
+    reason: string | null;
+  }[];
+  total_events: number;
+  authorship: {
+    typed_chars: number;
+    pasted_chars: number;
+    ai_assisted_chars: number;
+    typed_pct: number;
+    pasted_pct: number;
+    ai_assisted_pct: number;
+  };
+  timeline: {
+    timestamp: number;
+    event_type: string;
+    sequence: number;
+    session_id: string;
+    summary: string;
+  }[];
+  integrity: { valid: boolean; sessions_verified: number };
+};

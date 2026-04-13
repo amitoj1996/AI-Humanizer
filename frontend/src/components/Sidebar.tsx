@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { recorder } from "../lib/provenance";
 import { useAppStore } from "../store/app";
 import { useDocumentsStore } from "../store/documents";
 
@@ -37,6 +38,7 @@ export function Sidebar() {
 
   const handleSelectDoc = async (docId: string) => {
     clearResults();
+    await recorder.attachToDocument(docId);
     const doc = await selectDocument(docId);
     if (doc?.current_revision_id) {
       // Pull the current revision content into the editor

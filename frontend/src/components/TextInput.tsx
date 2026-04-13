@@ -1,14 +1,21 @@
 "use client";
 
+import { useRef } from "react";
+
+import { useProvenanceCapture } from "../lib/useProvenanceCapture";
 import { useAppStore } from "../store/app";
 
 export function TextInput() {
   const { text, setText } = useAppStore();
   const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useProvenanceCapture(ref);
 
   return (
     <div className="relative">
       <textarea
+        ref={ref}
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="Paste your text here..."

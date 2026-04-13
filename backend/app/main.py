@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import detection, documents, health, humanization, models
+from .api import detection, documents, health, humanization, models, provenance
 from .db.connection import init_db
 from .deps import get_registry
 
@@ -53,6 +53,7 @@ app.include_router(humanization.router)
 app.include_router(models.router)
 app.include_router(health.router)
 app.include_router(documents.router)
+app.include_router(provenance.router)
 
 
 # ---------------------------------------------------------------------------
