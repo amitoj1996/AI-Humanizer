@@ -5,8 +5,6 @@ stub services.  No PyTorch / HuggingFace / sentence-transformers get loaded.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -122,6 +120,22 @@ class FakeRegistry:
 @pytest.fixture
 def fake_registry() -> FakeRegistry:
     return FakeRegistry()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_db(tmp_path, monkeypatch):
+    """Each test gets a fresh SQLite file in a tmp dir.  No app data polluted."""
+    db_file = tmp_path / "test.db"
+    monkeypatch.setenv("AI_HUMANIZER_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("AI_HUMANIZER_DB_PATH", str(db_file))
+
+    # Reset cached engine so it picks up the new path
+    from app.db import connection
+
+    connection.reset_engine()
+    connection.init_db()
+    yield
+    connection.reset_engine()
 
 
 @pytest.fixture

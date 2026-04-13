@@ -5,6 +5,7 @@ import { useCallback } from "react";
 import { api } from "../lib/api";
 import type { Mode, Strength, Tone } from "../lib/types";
 import { useAppStore } from "../store/app";
+import { useDocumentsStore } from "../store/documents";
 import { SimilarityBadge } from "./SimilarityBadge";
 
 const STRENGTHS: Strength[] = ["light", "medium", "aggressive"];
@@ -44,6 +45,19 @@ export function HumanizeControls() {
         candidates_per_sentence: 3,
       });
       setHumanizeResult(res);
+
+      // Auto-save humanized output as a new revision
+      const docId = useDocumentsStore.getState().currentDocumentId;
+      if (docId) {
+        await useDocumentsStore
+          .getState()
+          .saveRevision(
+            docId,
+            res.humanized,
+            res.detection_after.ai_score,
+            `Humanized (${strength}/${tone}/${mode})`,
+          );
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Humanization failed");
     } finally {

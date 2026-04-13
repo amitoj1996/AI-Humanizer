@@ -1,8 +1,11 @@
 import type {
   DetectionResult,
+  Document,
   HumanizeRequest,
   HumanizeResult,
   ModelsResponse,
+  Project,
+  Revision,
   SentenceDetectionResult,
 } from "./types";
 
@@ -29,6 +32,22 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function patch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(res.statusText);
+  return res.json() as Promise<T>;
+}
+
+async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(res.statusText);
+  return res.json() as Promise<T>;
+}
+
 export const api = {
   detect: (text: string) => post<DetectionResult>("/api/detect", { text }),
   detectSentences: (text: string) =>
@@ -38,4 +57,33 @@ export const api = {
   listModels: () => get<ModelsResponse>("/api/models"),
   selectModel: (model: string) =>
     post<{ selected_model: string }>("/api/models/select", { model }),
+
+  // ---- Documents ----
+  listProjects: () => get<Project[]>("/api/projects"),
+  createProject: (name: string) => post<Project>("/api/projects", { name }),
+  deleteProject: (id: string) => del<{ ok: boolean }>(`/api/projects/${id}`),
+
+  listDocuments: (projectId: string) =>
+    get<Document[]>(`/api/projects/${projectId}/documents`),
+  createDocument: (req: {
+    project_id: string;
+    title: string;
+    initial_content?: string;
+  }) => post<Document>("/api/documents", req),
+  getDocument: (id: string) => get<Document>(`/api/documents/${id}`),
+  renameDocument: (id: string, title: string) =>
+    patch<Document>(`/api/documents/${id}`, { title }),
+  deleteDocument: (id: string) => del<{ ok: boolean }>(`/api/documents/${id}`),
+
+  listRevisions: (docId: string) =>
+    get<Revision[]>(`/api/documents/${docId}/revisions`),
+  saveRevision: (
+    docId: string,
+    req: { content: string; ai_score?: number; note?: string },
+  ) => post<Revision>(`/api/documents/${docId}/revisions`, req),
+  restoreRevision: (docId: string, revId: string) =>
+    post<Revision>(
+      `/api/documents/${docId}/revisions/${revId}/restore`,
+      {},
+    ),
 };

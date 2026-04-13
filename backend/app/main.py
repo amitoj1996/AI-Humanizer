@@ -17,7 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import detection, health, humanization, models
+from .api import detection, documents, health, humanization, models
+from .db.connection import init_db
 from .deps import get_registry
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
@@ -25,6 +26,8 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print("Initialising SQLite database...")
+    init_db()
     print("Loading AI detection models (first run downloads ~1.5 GB)...")
     registry = get_registry()
     registry.initialise()
@@ -49,6 +52,7 @@ app.include_router(detection.router)
 app.include_router(humanization.router)
 app.include_router(models.router)
 app.include_router(health.router)
+app.include_router(documents.router)
 
 
 # ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@ import { useCallback } from "react";
 
 import { api } from "../lib/api";
 import { useAppStore } from "../store/app";
+import { useDocumentsStore } from "../store/documents";
 import { BreakdownCard } from "./BreakdownCard";
 import { ScoreRing } from "./ScoreRing";
 import { SentenceHeatmap } from "./SentenceHeatmap";
@@ -32,10 +33,20 @@ export function DetectControls() {
     clearResults();
     setLoading("detect");
     try {
+      let aiScore: number | undefined;
       if (detectionMode === "sentences") {
-        setSentenceDetection(await api.detectSentences(text));
+        const result = await api.detectSentences(text);
+        setSentenceDetection(result);
+        aiScore = result.overall.ai_score;
       } else {
-        setDetection(await api.detect(text));
+        const result = await api.detect(text);
+        setDetection(result);
+        aiScore = result.ai_score;
+      }
+      // Auto-save revision snapshot of current text with AI score attached
+      const docId = useDocumentsStore.getState().currentDocumentId;
+      if (docId && aiScore !== undefined) {
+        await useDocumentsStore.getState().saveRevision(docId, text, aiScore, "After detection");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Detection failed");

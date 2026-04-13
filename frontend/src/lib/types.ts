@@ -90,3 +90,32 @@ export type HumanizeRequest = {
   max_iterations?: number;
   target_score?: number;
 };
+
+// ---- Documents ----
+export type Project = {
+  id: string;
+  name: string;
+  created_at: number;
+  updated_at: number;
+};
+
+export type Document = {
+  id: string;
+  project_id: string;
+  title: string;
+  source_type: string;
+  current_revision_id: string | null;
+  created_at: number;
+  updated_at: number;
+};
+
+export type Revision = {
+  id: string;
+  document_id: string;
+  parent_id: string | null;
+  content: string;
+  content_hash: string;
+  ai_score: number | null;
+  note: string | null;
+  created_at: number;
+};
