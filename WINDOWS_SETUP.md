@@ -487,31 +487,35 @@ Authorship and Turnitin's Authorship Dashboard, but local.
 
 ---
 
-## ⚠️ Known interim limitation (Phase 9 / Tiptap)
+## Editor & rich-text behaviour (Phase 10 status)
 
-The editor is now ProseMirror-based, but the **app's data model still
-round-trips plain text only**.
+Phase 10 closed the formatting-loss issue from Phase 9 — the editor now
+round-trips ProseMirror JSON end-to-end:
 
-- You can use Markdown shortcuts in the editor (`# heading`, `**bold**`,
-  `- list`, `> quote`, `` ` ` `` for code) and they render correctly
-  *while you're typing*.
-- But on **save / detect / humanize / document switch / restore**, all
-  formatting is stripped. The editor state goes through `editor.getText()`
-  before hitting the store, the backend, and revisions.
-- Net effect: you can create a heading, but next time you open the
-  document it's just a plain paragraph.
-
-This is a deliberate v1 trade-off to ship the editor without a schema
-migration. The next phase is to extend `Revision.content` to hold
-ProseMirror JSON (with a `format` column for backwards compat) so
-formatting survives the round-trip end-to-end.
+- Markdown shortcuts (`# heading`, `**bold**`, `*italic*`, `- list`,
+  `> quote`, `` ` ` ``) render in the editor AND survive
+  save / load / restore / `.md` export.
+- Detection / humanization still operate on a plain-text projection of
+  the doc — that's correct, those models don't use formatting and we
+  don't want them seeing markdown noise.
+- Auto-saves after **detection** preserve the structured doc; auto-saves
+  after **humanize** are plain text (the LLM returns a string).  Either
+  way the editor reconstructs a JSON view on the next user keystroke.
+- Existing plain-text revisions in your DB keep working — they get
+  `format='text'` from the migration's server default.
 
 ---
 
-## Phase 9 candidates — what's next, in priority order
+## What's next — research notes (post-Phase 10)
 
-These three are the remaining serious work. Browser extension and code
-signing are explicitly **dropped from the roadmap**.
+Browser extension and code signing are explicitly **dropped from the
+roadmap**.  Of the remaining items:
+
+- **Tiptap migration** ✅ shipped in Phase 9
+- **Rich-text revisions** ✅ shipped in Phase 10
+- **Frontend recorder unit tests** ✅ shipped in Phase 10
+- **HC3 corpus** — script ready, run once (see below)
+- **CUDA inside the PyInstaller bundle** — research notes below
 
 ### 1. Tiptap / ProseMirror editor migration (highest leverage)
 

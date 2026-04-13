@@ -39,10 +39,32 @@ def _load_samples(path: Path) -> list[dict]:
     return json.loads(path.read_text())
 
 
+def _gather_samples(side: str) -> list[dict]:
+    """Concatenate every sample file for a side ('human' or 'ai').
+
+    Default: app/eval/samples/{side}.json (the hand-curated 14+14 set).
+    Anything matching app/eval/samples/*_{side}.json (e.g. hc3_human.json
+    after running fetch_hc3.py once locally) is added on top.  Drop-in
+    file = drop-in samples — no code change needed to grow the corpus.
+    """
+    samples: list[dict] = []
+    base = SAMPLES_DIR / f"{side}.json"
+    if base.exists():
+        samples.extend(_load_samples(base))
+    for extra in sorted(SAMPLES_DIR.glob(f"*_{side}.json")):
+        if extra == base:
+            continue
+        try:
+            samples.extend(_load_samples(extra))
+        except json.JSONDecodeError:
+            continue
+    return samples
+
+
 def run_detection_metrics(detector) -> dict:
-    """Run the detector against the committed samples and compute metrics."""
-    human = _load_samples(SAMPLES_DIR / "human.json")
-    ai = _load_samples(SAMPLES_DIR / "ai.json")
+    """Run the detector against every sample file present and compute metrics."""
+    human = _gather_samples("human")
+    ai = _gather_samples("ai")
 
     human_scores = [detector.detect(s["text"])["ai_score"] for s in human]
     ai_scores = [detector.detect(s["text"])["ai_score"] for s in ai]
