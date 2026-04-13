@@ -39,8 +39,15 @@ def _ensure_ollama():
 
 
 def _start_server():
-    """Run uvicorn in a daemon thread."""
-    uvicorn.run("app.main:app", host="127.0.0.1", port=PORT, log_level="warning")
+    """Run uvicorn in a daemon thread.
+
+    We pass the ASGI app object directly (not the import string "app.main:app")
+    so this works inside a PyInstaller bundle where module import paths differ
+    from a plain `cwd=backend/` launch.
+    """
+    from app.main import app
+
+    uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="warning")
 
 
 def _wait_for_server(timeout: int = 120):
