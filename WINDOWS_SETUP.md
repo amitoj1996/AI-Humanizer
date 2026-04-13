@@ -1,28 +1,30 @@
 # AI Humanizer — Windows Setup & Usage
 
 Everything you need to clone, set up, develop, test, and ship this app on
-a Windows PC. Written for the April 2026 state of the repo (commit `0c815a0`).
+a Windows PC. Tracks the live state of the repo (latest commit, April 2026).
 
 > Target hardware for the default model profile: a single 8 GB NVIDIA GPU
-> (RTX 3070-class) or better. Works on CPU too, just slower. A 2× RTX 3070
+> (RTX 3070-class) or better. CPU works too, just slower. A 2× RTX 3070
 > setup lets you run the 9B rewriter on one card and keep the detector
 > warm on the other.
 
 ---
 
 ## Table of contents
+
 1. [What this app does](#what-this-app-does)
 2. [Prerequisites](#prerequisites)
 3. [First-time setup](#first-time-setup)
 4. [Daily development](#daily-development)
 5. [Running tests](#running-tests)
-6. [Generating the eval baseline](#generating-the-eval-baseline)
+6. [Eval baseline + HC3 corpus](#eval-baseline--hc3-corpus)
 7. [Building the Windows installer](#building-the-windows-installer)
 8. [Project structure](#project-structure)
 9. [Environment variables](#environment-variables)
-10. [Troubleshooting](#troubleshooting)
-11. [Phase-by-phase changelog](#phase-by-phase-changelog)
-12. [Phase 7 — what we just did](#phase-7--what-we-just-did)
+10. [Editor & rich-text behaviour](#editor--rich-text-behaviour)
+11. [Troubleshooting](#troubleshooting)
+12. [Phase-by-phase changelog](#phase-by-phase-changelog)
+13. [What's next](#whats-next)
 
 ---
 
@@ -36,8 +38,9 @@ Undetectable.ai / Quillbot:
 2. **Tamper-evident provenance** — every edit, paste, detection, and
    humanize pass is appended to a SHA-256 hash-chained event log per
    session. Export a writing-process report showing typed vs pasted vs
-   AI-assisted authorship with a verifiable integrity proof. Nobody else
-   in the humanizer market ships this.
+   AI-assisted authorship with a verifiable integrity proof. Plus an
+   *Authoring Replay* tab that scrubs through every save and AI rewrite.
+   Nobody else in the humanizer market ships this.
 3. **Citation-aware rewriting** — `[Smith 2024]`, `"quotes"`, code,
    and LaTeX are detected and preserved verbatim through humanization.
 
@@ -49,23 +52,29 @@ Install these first (one-time):
 
 | Tool | Version | Why | Install |
 |---|---|---|---|
-| **Python** | 3.13.x (NOT 3.14 — pydantic-core incompatibility) | Backend runtime | [python.org](https://www.python.org/downloads/windows/) — check "Add Python to PATH" |
+| **Python** | 3.13.x (NOT 3.14 — pydantic-core incompatibility) | Backend runtime | [python.org](https://www.python.org/downloads/windows/) — tick "Add Python to PATH" |
 | **Node.js** | 22 LTS | Frontend build | [nodejs.org](https://nodejs.org/en/download/) |
 | **Git** | any recent | Clone / version control | [git-scm.com](https://git-scm.com/download/win) |
 | **Ollama** | 0.18+ | Local LLM runtime | [ollama.com/download/windows](https://ollama.com/download/windows) |
-| **Inno Setup 6** | 6.x | Windows installer build only | [jrsoftware.org](https://jrsoftware.org/isinfo.php) |
 | **NVIDIA driver** | 550+ | GPU acceleration | NVIDIA's site (skip if CPU-only) |
-| **WebView2 Runtime** | Evergreen | Native desktop window | Preinstalled on Win11; `MicrosoftEdgeWebview2Setup.exe` on Win10 |
+| **Inno Setup 6** | 6.x | Windows installer build only — skip until you need it | [jrsoftware.org](https://jrsoftware.org/isinfo.php) |
+| **WebView2 Runtime** | Evergreen | Native desktop window for the .exe | Preinstalled on Win11; bundled by our installer for Win10 |
 
-Open a fresh PowerShell after installs so PATH updates take effect.
+Open a fresh PowerShell after installs so PATH updates take effect:
 
-Verify:
 ```powershell
-python --version        # Python 3.13.x
-node --version          # v22.x
-npm --version           # 10.x
-ollama --version        # 0.18.x
+python --version    # 3.13.x
+node --version      # v22.x
+npm --version       # 10.x
+ollama --version    # 0.18.x
 git --version
+nvidia-smi          # for GPU users — should list your card(s)
+```
+
+If `Activate.ps1` later complains about execution policy, run this once:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
 
 ---
@@ -80,231 +89,241 @@ git clone https://github.com/amitoj1996/AI-Humanizer.git
 cd AI-Humanizer
 ```
 
-### 2. Backend
+### 2. Backend venv + dependencies
 
 ```powershell
 cd backend
 python -m venv venv
 .\venv\Scripts\Activate.ps1
-
-# PowerShell execution-policy gotcha — if Activate.ps1 is blocked, run ONCE:
-#   Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
-
 python -m pip install --upgrade pip
 
-# Install CPU-only torch first (faster); CUDA wheel swap happens later if
-# you have an NVIDIA GPU. Skip this line if you already have CUDA torch.
+# CPU torch first — small + fast install.  GPU swap is one command in step 3.
 pip install torch --index-url https://download.pytorch.org/whl/cpu
-
 pip install -r requirements.txt
 ```
 
-### 2a. (Optional, NVIDIA only) Upgrade to CUDA torch
+### 3. (NVIDIA only) Swap to GPU torch
+
+We ship a helper that detects `nvidia-smi`, picks the highest-compatible
+PyTorch CUDA wheel index (cu118 / cu121 / cu124 / cu126), and reinstalls
+torch into your `backend\venv` — verifying `torch.cuda.is_available()` at
+the end so you know it worked:
 
 ```powershell
-nvidia-smi                 # confirm driver / CUDA version, should be 12.x
-pip uninstall -y torch
-pip install torch --index-url https://download.pytorch.org/whl/cu124
-python -c "import torch; print('CUDA:', torch.cuda.is_available(), 'devices:', torch.cuda.device_count())"
-# Expected: CUDA: True, devices: 2 (for your 2x RTX 3070)
+cd ..
+.\scripts\enable-cuda.ps1
+# Expected last line: "✓ CUDA torch is active in backend/venv."
 ```
 
-### 3. Frontend
+You can override the auto-detected version: `.\scripts\enable-cuda.ps1 -CudaVersion cu124`
 
-New PowerShell tab (leave the venv one for backend):
+> The `enable-cuda.ps1` script targets the **dev venv** only. The
+> PyInstaller-built installer ships CPU torch; CUDA-in-bundle is on the
+> roadmap (see [What's next](#whats-next)).
+
+### 4. Frontend (a **second** PowerShell window)
 
 ```powershell
 cd $HOME\AI-Humanizer\frontend
 npm ci
 ```
 
-### 4. Ollama models
+### 5. Pull Ollama models
 
 ```powershell
-# Default rewriter — 6.6 GB, fits on one 8 GB GPU
+# Default rewriter — 6.6 GB Q4_K_M, fits on a single 8 GB GPU
 ollama pull qwen3.5:9b
 
-# Fast profile (optional) — 3.4 GB
+# Optional fast profile — 3.4 GB
 ollama pull qwen3.5:4b
 
-# Start the Ollama background service (if not already running)
-ollama serve
+# Confirm
+ollama list
 ```
 
-Keep `ollama serve` running in its own terminal (or confirm the Windows
-service is active).
-
-### 5. HuggingFace models (auto-downloaded on first run)
-
-The backend auto-downloads on first launch (~1.5 GB total):
-
-- `roberta-base-openai-detector` — binary AI classifier (~500 MB)
-- `Qwen/Qwen3.5-4B-Base` — perplexity LM (~8 GB **on-disk** but we use CPU/GPU weights selectively)
-- `sentence-transformers/all-MiniLM-L6-v2` — similarity checker (~90 MB)
-
-On a slow connection the 4B perplexity model takes a while. If that's too
-heavy, override to the 0.8B variant (see [Environment variables](#environment-variables)).
+The Ollama installer registers a Windows background service. If the app
+later complains "Ollama is not running", open a PowerShell and run
+`ollama serve`, or restart Windows once.
 
 ### 6. First launch
 
-Two terminals, in this order:
+Two PowerShell windows:
 
-**Terminal A — backend**
+**Window A — backend** (with venv active)
 ```powershell
 cd $HOME\AI-Humanizer\backend
 .\venv\Scripts\Activate.ps1
 python run.py
 ```
-First boot shows `Loading AI detection models (first run downloads ~1.5 GB)...`
-— be patient. Subsequent boots use the HuggingFace cache.
 
-**Terminal B — frontend**
+First boot logs:
+```
+Initialising SQLite database...
+Loading AI detection models (first run downloads ~1.5 GB)...
+```
+
+The first-run download is:
+
+| Model | Size | Purpose |
+|---|---|---|
+| `roberta-base-openai-detector` | ~500 MB | Binary AI/human classifier |
+| `Qwen/Qwen3.5-4B-Base` | ~8 GB on disk | Perplexity / burstiness analysis |
+| `sentence-transformers/all-MiniLM-L6-v2` | ~90 MB | Meaning-preservation similarity |
+
+On a slow connection, the 4B perplexity model is the bottleneck. On a
+4 GB-or-less GPU, switch to the smaller variant via env var (see
+[Environment variables](#environment-variables)).
+
+**Window B — frontend**
 ```powershell
 cd $HOME\AI-Humanizer\frontend
 npm run dev
 ```
 
-Open http://localhost:3000. If all four services are up (Ollama, backend,
-frontend, WebView2) you should see the Ollama model dropdown populate in
-the header and be able to create a project.
+Open **http://localhost:3000**. The header model dropdown should populate
+with your pulled Ollama models. You're up.
 
 ---
 
 ## Daily development
 
-Once you've done the first-time setup, the everyday loop is:
+Two PowerShell windows, both hot-reload:
 
 ```powershell
-# Terminal A
-cd $HOME\AI-Humanizer\backend
-.\venv\Scripts\Activate.ps1
-python run.py
+# A — backend
+cd $HOME\AI-Humanizer\backend; .\venv\Scripts\Activate.ps1; python run.py
 
-# Terminal B
-cd $HOME\AI-Humanizer\frontend
-npm run dev
+# B — frontend
+cd $HOME\AI-Humanizer\frontend; npm run dev
 ```
 
-Both support hot reload — save a Python file, uvicorn restarts;
-save a TSX file, Next.js refreshes the browser.
+Save a Python file → uvicorn restarts. Save a TSX file → Next.js refreshes.
 
-### Managing Ollama models
+### Managing Ollama models at runtime
 
 ```powershell
-ollama list                        # see pulled models
-ollama rm <name>                   # remove one
-ollama pull qwen3.5:9b             # pull/update the default
+ollama list                  # see pulled models
+ollama rm <name>             # remove one
+ollama pull qwen3.5:9b       # pull or update the default
 ```
 
-In the app's header dropdown you can switch between any pulled model at
-runtime — the backend updates the pipeline on the next humanize call.
+The app's header dropdown switches between any pulled model — the backend
+updates its pipeline on the next humanize call.
 
 ---
 
 ## Running tests
 
-### Unit / integration tests (fast, offline, no models)
-```powershell
-cd $HOME\AI-Humanizer\backend
-.\venv\Scripts\Activate.ps1
-$env:HF_HUB_OFFLINE = "1"
-$env:TRANSFORMERS_OFFLINE = "1"
-pytest -q
-```
-Expected: **69 passed, 2 deselected** in ~4 seconds.
+| Test type | Command | When |
+|---|---|---|
+| Backend unit (fast, offline) | `cd backend; pytest -q` | After backend changes |
+| Backend offline-strict | `$env:HF_HUB_OFFLINE="1"; $env:TRANSFORMERS_OFFLINE="1"; pytest -q` | Verify zero network deps |
+| Backend eval gate (slow, real models) | `pytest -m eval` | After detector / weight changes |
+| Frontend type check | `cd frontend; npx tsc --noEmit` | Before commit |
+| Frontend lint | `cd frontend; npm run lint` | Before commit |
+| Frontend unit (Vitest) | `cd frontend; npm test` | After recorder / store changes |
+| Frontend build | `cd frontend; npm run build` | Before tagging a release |
+| End-to-end (Playwright) | `cd frontend; npm run e2e:install` (one-time) then `npm run e2e` | Before PR |
 
-### Frontend type check + lint + build
-```powershell
-cd $HOME\AI-Humanizer\frontend
-npx tsc --noEmit
-npm run lint
-npm run build
-```
+Expected baseline: **80 backend tests** pass offline in ~2 s, **6 Vitest
+tests** in ~0.5 s, **2 Playwright specs** in ~30 s.
 
-### End-to-end (Playwright) tests
-
-Requires frontend + backend deps installed, but no HuggingFace cache and
-no Ollama — the `run_test_server.py` entry point uses a FakeRegistry and
-a mocked Ollama client.
-
-```powershell
-cd $HOME\AI-Humanizer\frontend
-npm run e2e:install        # one-time: installs Chromium for Playwright (~200 MB)
-npm run e2e                # runs the smoke tests
-```
-
-Playwright auto-starts both servers (backend on :8001, frontend on :3001)
-and tears them down afterwards.
-
-### Eval regression suite (slow, loads real models)
-See the [next section](#generating-the-eval-baseline).
+The Playwright suite uses `run_test_server.py` (FakeRegistry-backed
+backend on port 8001) so it doesn't need real models or a running Ollama.
 
 ---
 
-## Generating the eval baseline
+## Eval baseline + HC3 corpus
 
-The eval harness is a regression gate on detector quality. It's off by
-default because it loads real models (~30 s cold start).
+The eval harness is a regression gate on detector quality. Two pieces:
 
-### First time — set the baseline
+### Step A — pull the HC3 corpus subset (one-time, ~10 MB)
 
 ```powershell
 cd $HOME\AI-Humanizer\backend
 .\venv\Scripts\Activate.ps1
+python -m app.eval.fetch_hc3
+```
+
+Downloads ~50 samples each from 5 HC3 sources (reddit_eli5, open_qa,
+wiki_csai, medicine, finance) — ~250 human + ~250 ChatGPT after
+filtering. Writes `hc3_human.json` + `hc3_ai.json` to
+`backend\app\eval\samples\`. Each sample carries CC BY-SA attribution
+in its `source` field.
+
+The fetcher is deterministic — re-running with the same `SEED` constant
+produces the same subset. Bump `SAMPLES_PER_SOURCE` in
+`backend\app\eval\fetch_hc3.py` if you want more coverage.
+
+### Step B — generate the baseline
+
+```powershell
 python -m app.eval.runner --update-baseline
 ```
 
-This will:
-1. Load RoBERTa + Qwen 3.5-4B + sentence-transformers
-2. Score the 8 human + 8 AI labelled samples in `app/eval/samples/`
-3. Run the 5 preservation round-trip checks
-4. Write the results to `app/eval/baseline.json`
+This loads the real detector models (~30 s cold start) and:
+1. Scores all `*_human.json` + `*_ai.json` samples in `backend\app\eval\samples\`
+   (the runner auto-discovers — drop in more files, no code change needed)
+2. Runs the 5 preservation round-trip checks
+3. Writes the metrics to `backend\app\eval\baseline.json`
 
-Commit that file:
+### Step C — commit
+
 ```powershell
-git add backend/app/eval/baseline.json
-git commit -m "eval: set baseline from my machine"
+cd ..
+git add backend\app\eval\samples\hc3_*.json `
+        backend\app\eval\baseline.json
+git commit -m "eval: HC3 corpus subset + initial baseline"
 git push
 ```
 
-From now on, every CI run (and `pytest -m eval` locally) compares against
-that snapshot. `ACCURACY_TOLERANCE = 0.10` — if accuracy drops more than
-10 pp from baseline, CI fails.
+After that lands on `main`, the `Eval regression` GitHub workflow stops
+short-circuiting (it has a `check-baseline` guard) and starts enforcing
+detector accuracy on every push to main. Default tolerance:
+`ACCURACY_TOLERANCE = 0.10` — drops over 10 pp from baseline fail CI.
+Once your signal is stable you can tighten that toward 0.05 in
+`backend\app\eval\runner.py`.
 
-### After a change that might affect detection
+### Run the gate locally any time
+
 ```powershell
-pytest -m eval -v          # runs the regression gate
+pytest -m eval -v
 ```
-
-### Expanding the golden set
-Edit `backend/app/eval/samples/human.json`, `ai.json`, or `preserve.json`
-and re-run `--update-baseline`.
 
 ---
 
 ## Building the Windows installer
 
-You'll produce `AIHumanizerSetup.exe` — a ~2 GB installer that drops a
-PyInstaller-frozen app into `%LOCALAPPDATA%\Programs\AI Humanizer` and
-handles WebView2 + Ollama detection.
+Produces `AIHumanizerSetup.exe` — a ~2 GB installer that drops a
+PyInstaller-frozen bundle into `%LOCALAPPDATA%\Programs\AI Humanizer`,
+adds Start Menu + Desktop shortcuts, and detects/installs WebView2 +
+Ollama if missing.
 
 ### Via GitHub Actions (recommended)
+
+Tag a release:
+
 ```powershell
 git tag v2.0.0
 git push --tags
 ```
+
 The `Build Windows Installer` workflow runs on `windows-latest`, builds
 the installer, and attaches it to the GitHub release. Grab it from the
 Releases page.
 
 ### Locally
+
+Requires Inno Setup 6 installed (see [Prerequisites](#prerequisites)).
+
 ```powershell
 cd $HOME\AI-Humanizer
 .\windows\build.ps1
 ```
-Outputs `windows\output\AIHumanizerSetup.exe`.
 
-Details and model-profile tables in [windows/README.md](windows/README.md).
+Output: `windows\output\AIHumanizerSetup.exe`. Full build details and
+the Ollama-model-profile picker table in
+[windows/README.md](windows/README.md).
 
 ---
 
@@ -313,15 +332,16 @@ Details and model-profile tables in [windows/README.md](windows/README.md).
 ```
 AI-Humanizer/
 ├── .github/workflows/
-│   ├── test.yml              backend + frontend fast tests
+│   ├── test.yml              backend pytest + frontend tsc/lint/vitest/build
 │   ├── e2e.yml               Playwright smoke tests
-│   ├── eval.yml              detector regression gate (main only)
+│   ├── eval.yml              detector regression gate (main only,
+│   │                         skipped until baseline.json exists)
 │   └── build-windows.yml     Inno Setup installer on v* tags
 ├── backend/
 │   ├── alembic.ini
 │   ├── pytest.ini            `-m "not eval"` excludes the eval gate by default
 │   ├── run.py                dev entry point
-│   ├── run_test_server.py    Playwright-mode server (fakes, no models)
+│   ├── run_test_server.py    Playwright-mode server (FakeRegistry, no models)
 │   ├── desktop.py            pywebview launcher for the .app / .exe bundle
 │   ├── requirements.txt
 │   ├── app/
@@ -331,30 +351,24 @@ AI-Humanizer/
 │   │   ├── api/              per-domain routers (detection, humanization,
 │   │   │                     documents, provenance, import_export, ...)
 │   │   ├── schemas/          Pydantic request/response models
-│   │   ├── services/         business logic (documents, revisions)
+│   │   ├── services/         business logic (documents, prosemirror, ...)
 │   │   ├── detector/         ensemble: classifier + perplexity + linguistic
-│   │   ├── humanizer/        Ollama rewriter, rule-based post-processor,
-│   │   │                     structural rewriter, pipeline, preserve
-│   │   ├── provenance/       hash-chain primitives + service + service report
+│   │   ├── humanizer/        Ollama rewriter + post-process + structural
+│   │   │                     + pipeline + preserve (citation-aware)
+│   │   ├── provenance/       hash-chain primitives + service + report + replay
 │   │   ├── ingest/           PDF/DOCX/MD/TXT import
 │   │   ├── export/           DOCX/MD/TXT + process-report export
-│   │   ├── eval/             regression-gate runner + golden samples
+│   │   ├── eval/             regression-gate runner + golden samples + HC3 fetcher
 │   │   └── db/               SQLModel models + Alembic migrations
-│   └── tests/
-│       ├── conftest.py       FakeRegistry install + per-test tmp DB
-│       ├── test_api.py
-│       ├── test_documents.py
-│       ├── test_provenance.py
-│       ├── test_import_export.py
-│       ├── test_preserve.py
-│       └── test_eval.py      marked @pytest.mark.eval — slow regression gate
+│   └── tests/                pytest (offline-safe via FakeRegistry)
 ├── frontend/
 │   ├── playwright.config.ts  boots backend + frontend for E2E
+│   ├── vitest.config.ts      jsdom + react for recorder unit tests
 │   ├── e2e/smoke.spec.ts     happy-path Playwright tests
 │   └── src/
 │       ├── app/              Next.js App Router pages
-│       ├── components/       13 components, each focused
-│       ├── lib/              api client, types, provenance recorder
+│       ├── components/       Tiptap editor + sidebar + report modal + ...
+│       ├── lib/              api client, types, provenance recorder + tests
 │       └── store/            Zustand stores (app, documents)
 ├── windows/
 │   ├── ai-humanizer.spec     PyInstaller spec (cross-platform)
@@ -362,7 +376,10 @@ AI-Humanizer/
 │   ├── build.ps1             orchestrator
 │   ├── bootstrap/            WebView2 + Ollama silent installers
 │   └── README.md             build + install + troubleshooting
-├── scripts/                  macOS .app build + dev start helpers
+├── scripts/
+│   ├── enable-cuda.ps1       dev-venv torch CUDA swap helper
+│   ├── build-app.sh          macOS .app build helper
+│   └── start.sh              macOS dev start helper
 ├── assets/icon.svg           app icon source
 └── WINDOWS_SETUP.md          (this file)
 ```
@@ -376,7 +393,7 @@ Override defaults without touching config files:
 | Variable | Default | Purpose |
 |---|---|---|
 | `AI_HUMANIZER_OLLAMA_MODEL` | `qwen3.5:9b` | Rewriter tag |
-| `AI_HUMANIZER_PERPLEXITY_MODEL` | `Qwen/Qwen3.5-4B-Base` | Perplexity LM (try `Qwen/Qwen3.5-0.8B` on CPU) |
+| `AI_HUMANIZER_PERPLEXITY_MODEL` | `Qwen/Qwen3.5-4B-Base` | Perplexity LM (use `Qwen/Qwen3.5-0.8B` on small-VRAM machines) |
 | `AI_HUMANIZER_CLASSIFIER_MODEL` | `roberta-base-openai-detector` | Binary AI classifier |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API host |
 | `AI_HUMANIZER_DATA_DIR` | `%LOCALAPPDATA%\AIHumanizer` | App data root |
@@ -384,7 +401,8 @@ Override defaults without touching config files:
 | `HF_HUB_OFFLINE` | — | Set to `1` to block HuggingFace network calls |
 | `TRANSFORMERS_OFFLINE` | — | Set to `1` to enforce offline Transformers |
 
-Example (use the faster-smaller perplexity model on a 4 GB GPU machine):
+Example — use the smaller perplexity model on a 4 GB GPU:
+
 ```powershell
 $env:AI_HUMANIZER_PERPLEXITY_MODEL = "Qwen/Qwen3.5-0.8B"
 python run.py
@@ -392,16 +410,40 @@ python run.py
 
 ---
 
+## Editor & rich-text behaviour
+
+The editor is Tiptap / ProseMirror. Revisions store ProseMirror JSON, so
+formatting survives the round-trip end-to-end:
+
+- Markdown shortcuts (`# heading`, `**bold**`, `*italic*`, `- list`,
+  `> quote`, `` ` ` ``) render in the editor AND survive
+  save / load / restore / `.md` export.
+- Detection / humanization operate on a plain-text projection of the doc
+  — those models don't use formatting and we don't want them seeing
+  markdown noise.
+- Auto-saves after **detection** preserve the structured doc; auto-saves
+  after **humanize** are plain text (the LLM returns a string). Either
+  way the editor reconstructs a JSON view on the next user keystroke.
+- Existing plain-text revisions in your DB keep working — they get
+  `format='text'` from the migration's server default.
+
+The provenance recorder listens on ProseMirror transactions (not raw DOM
+input events), so per-step typed/pasted/deleted classification is
+accurate, IME composition is handled, and undo/redo is logged as
+`manual_edit` rather than counterfeit fresh authorship.
+
+---
+
 ## Troubleshooting
 
 ### "This app can't run on your PC" / SmartScreen
-We don't code-sign yet (Phase 4 deferred this). Click **More info → Run anyway**.
-Plan to fix with Azure Trusted Signing ($10/mo) in a future release.
+Unsigned installers trigger SmartScreen. Click **More info → Run anyway**.
+Code signing is not on the roadmap right now (per project direction).
 
 ### First launch takes forever
-Models are downloading. The backend is fine, just wait. Watch
-`%LOCALAPPDATA%\..\.cache\huggingface\hub` grow, or enable offline mode
-if you've already downloaded once.
+HuggingFace models are downloading. Watch
+`%LOCALAPPDATA%\..\.cache\huggingface\hub` grow. Once cached, set
+`HF_HUB_OFFLINE=1` to enforce offline use on subsequent runs.
 
 ### `ModuleNotFoundError: No module named 'pydantic_core'`
 Wrong Python version. Pydantic-core doesn't support Python 3.14 yet.
@@ -413,17 +455,20 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
 
 ### Ollama not found from the app
-Confirm `ollama serve` is running in a terminal or as a Windows service.
-Test: `curl http://localhost:11434/api/tags` — should return JSON with
-your pulled models.
+Confirm Ollama is running:
+```powershell
+curl http://localhost:11434/api/tags
+```
+Should return JSON. If not, `ollama serve` in a terminal, or restart
+Windows once so the service registers.
 
 ### `torch.cuda.is_available()` returns False
 1. `nvidia-smi` works? If not, fix the driver.
-2. You have the CPU-only torch. Reinstall with the CUDA index URL.
+2. You probably have CPU torch. Run `.\scripts\enable-cuda.ps1` from the
+   repo root with the venv active.
 
 ### Playwright tests hang on "create project" dialog
-Your Windows build is missing a CDP feature. Reinstall with
-`npx playwright install chromium`.
+Browser missing. Run `npx playwright install chromium` from `frontend\`.
 
 ### Port 8000 / 3000 already in use
 ```powershell
@@ -440,246 +485,39 @@ a stable cert over a few hundred installs.
 
 ## Phase-by-phase changelog
 
-| Phase | Commit prefix | What shipped |
+| Phase | Commit | What shipped |
 |---|---|---|
-| 0 | `f9449b4` | Foundation refactor: dependency-injected FastAPI, Zustand store, 12 split components, CI (GH Actions), 12 smoke tests |
+| 0 | `f9449b4` | Foundation refactor: dependency-injected FastAPI, Zustand store, 12 split components, CI, 12 smoke tests |
 | 1 | `6f1d2ad` | SQLite + SQLModel: projects, documents, revisions with SHA-256 dedup; sidebar, doc header, revision timeline |
-| 2 | `e951551` | **The moat** — Tamper-evident provenance with hash chain, session lifecycle, writing-process report with authorship breakdown |
+| 2 | `e951551` | **The moat** — tamper-evident provenance with hash chain, session lifecycle, writing-process report with authorship breakdown |
 | 3 | `2354ac7` | Import/export: PDF (PyMuPDF4LLM), DOCX (python-docx), MD, TXT; process-report export in MD + DOCX |
 | 4 | `07e0314` | Windows installer: PyInstaller onedir + Inno Setup + WebView2/Ollama bootstrap; cross-platform spec |
 | 5 | `cfd634a` | Citation-aware rewriting: regex-detected citations/quotes/code/LaTeX survive humanization verbatim |
-| 6 | `74619ff` | Trust fixes from code review: test isolation (67 tests pass offline in 1.7 s), offline fonts, NLTK removal, DOCX ordering, seal verification, Alembic migrations |
-| 7 | `0c815a0` | Eval harness, Playwright smoke tests, two more provenance event-loss bug fixes |
-| 7-fix | `8c5cf2d` | Review fixes: cross-session contamination, eval gate enforcement, Playwright hermeticity |
-| 8 | `59f4a45` | **Authoring replay** + CUDA dev helper + eval corpus expansion (8→14) |
+| 6 | `74619ff` | Trust fixes from review: test isolation, offline fonts, NLTK removal, DOCX ordering, seal verification, Alembic migrations |
+| 7 | `0c815a0` + `8c5cf2d` | Eval harness, Playwright smoke tests, two more provenance event-loss fixes |
+| 8 | `59f4a45` + `c2547b9` | **Authoring replay** + CUDA dev helper + eval corpus expansion (8→14) |
+| 9 | `00081e8` + `ce2728f` | **Tiptap / ProseMirror editor migration** + transaction-level recorder |
+| 10 | `cd12ad8` + `5be285a` | **Rich-text revisions** (ProseMirror JSON in `Revision.content`), Vitest recorder unit tests |
+| HC3 | `7cb1342` | HC3 fetcher script + sample-file auto-discovery in the eval runner |
 
 ---
 
-## Phase 8 — Authoring Replay (the headline feature)
+## What's next
 
-The provenance hash chain we shipped in Phase 2 now powers a **scrubbable
-history view of the document** — the same product surface as Grammarly
-Authorship and Turnitin's Authorship Dashboard, but local.
+Browser extension and code signing are explicitly **dropped from the roadmap**.
 
-- **Backend** — `app/provenance/replay.py` walks revisions + AI-rewrite
-  events into a time-sorted snapshot list; the API exposes
-  `GET /api/documents/{id}/provenance/replay`.
-- **Frontend** — new `Authoring Replay` tab in the Writing Process Report
-  modal with a scrubber, colour-coded tick marks (revision = green,
-  AI rewrite = purple, merged = striped), per-snapshot metadata, and a
-  reconstructed-content viewer with copy-to-clipboard.
-- **CUDA dev helper** — `scripts\enable-cuda.ps1` detects `nvidia-smi`,
-  picks the highest matching PyTorch wheel index, and reinstalls torch
-  into `backend\venv`. Verifies `torch.cuda.is_available()` before
-  declaring success.
-- **Eval corpus** — grew from 8+8 to 14+14 hand-curated samples; bigger
-  signal for the regression gate without licensing fragility.
+Of the remaining items:
 
-### Honest scope
-- Per-keystroke replay (sub-revision granularity) needs cursor-position
-  tracking the textarea-based recorder doesn't currently capture. Every
-  *save* and every *AI rewrite* is a navigable frame, which is what
-  matters for academic-integrity / authorship-proof use cases. To get
-  per-keystroke we'd need the Tiptap migration (see Phase 9 below).
-- CUDA helper targets the dev venv only — the PyInstaller-frozen Windows
-  installer still ships CPU torch. CUDA inside the bundle is a separate
-  problem (see Phase 9).
-
----
-
-## Editor & rich-text behaviour (Phase 10 status)
-
-Phase 10 closed the formatting-loss issue from Phase 9 — the editor now
-round-trips ProseMirror JSON end-to-end:
-
-- Markdown shortcuts (`# heading`, `**bold**`, `*italic*`, `- list`,
-  `> quote`, `` ` ` ``) render in the editor AND survive
-  save / load / restore / `.md` export.
-- Detection / humanization still operate on a plain-text projection of
-  the doc — that's correct, those models don't use formatting and we
-  don't want them seeing markdown noise.
-- Auto-saves after **detection** preserve the structured doc; auto-saves
-  after **humanize** are plain text (the LLM returns a string).  Either
-  way the editor reconstructs a JSON view on the next user keystroke.
-- Existing plain-text revisions in your DB keep working — they get
-  `format='text'` from the migration's server default.
-
----
-
-## What's next — research notes (post-Phase 10)
-
-Browser extension and code signing are explicitly **dropped from the
-roadmap**.  Of the remaining items:
-
-- **Tiptap migration** ✅ shipped in Phase 9
-- **Rich-text revisions** ✅ shipped in Phase 10
-- **Frontend recorder unit tests** ✅ shipped in Phase 10
-- **HC3 corpus** — script ready, run once (see below)
-- **CUDA inside the PyInstaller bundle** — research notes below
-
-### 1. Tiptap / ProseMirror editor migration (highest leverage)
-
-**Why**: Replaces the textarea with a real rich editor. Unlocks
-per-keystroke replay (since ProseMirror transactions are typed semantic
-operations, not blind DOM input events), enables formatting preservation
-through humanize, and gives us track-changes / comment-thread surface for
-free if we want them later. Turns the app from "smart textarea" into a
-proper writing tool.
-
-**How** (researched April 2026):
-- Tiptap's `onTransaction` hook intercepts every ProseMirror transaction
-  before it's applied — that's the exact integration point our recorder
-  needs. Existing community projects do exactly this:
-  [chenyuncai/tiptap-track-change-extension](https://deepwiki.com/chenyuncai/tiptap-track-change-extension/2.2-transaction-processing)
-  is a working reference for transaction-level change tracking with full
-  IME / collaborative-edit / undo-redo handling.
-- Tiptap is framework-agnostic; the React bindings (`@tiptap/react`) work
-  cleanly inside Next.js client components. Replace `<textarea>` in
-  `TextInput.tsx` with `<EditorContent editor={editor} />` and migrate
-  the recorder hook to listen on `editor.on('transaction', ...)` instead
-  of DOM `beforeinput`.
-- Document storage: store ProseMirror's JSON representation
-  (`editor.getJSON()`) in `Revision.content` instead of plain text. Add a
-  `format` column (`text` vs `prosemirror`) so existing revisions stay
-  loadable. Extract plain text via `editor.getText()` for the detector.
-- Estimated effort: 1 week. Touches editor, recorder, revision storage
-  schema, replay (gain per-step granularity), provenance reporting.
-- References:
-  [Tiptap concepts](https://tiptap.dev/docs/editor/core-concepts/introduction),
-  [ProseMirror transactions](https://tiptap.dev/docs/editor/core-concepts/prosemirror).
-
-### 2. CUDA inside the PyInstaller bundle
-
-**Why**: `enable-cuda.ps1` works for the dev venv but the
-`AIHumanizerSetup.exe` installer ships CPU-only torch. Users without a
-dev environment can't get GPU acceleration today.
-
-**How** (researched April 2026):
-- The torch CUDA wheels are ~2.5 GB each, so we can't bundle them all
-  in the installer (which is already ~1.5 GB).
-- Recommended pattern from the
-  [PyInstaller + PyTorch discussion threads](https://github.com/pyinstaller/pyinstaller/issues/7175):
-  ship CPU torch in the bundle, then on first launch:
-  1. Detect `nvidia-smi` via subprocess
-  2. Download the matching CUDA wheel (cu124 etc.) into
-     `%LOCALAPPDATA%\AIHumanizer\torch-cuda\`
-  3. Insert that path at the front of `sys.path` so it shadows the
-     bundled torch
-  4. Restart the Python process so the new torch is loaded clean
-- Risks called out in the threads: DLL-load failures when CUDA driver
-  version is older than the wheel's CUDA version (e.g. mixing cu124
-  bundled DLLs with a driver that only supports cu118). Mitigate by
-  parsing the driver-reported CUDA from `nvidia-smi` (we already do this
-  in `enable-cuda.ps1`) and downloading the highest compatible wheel.
-- Estimated effort: 3-4 days. Mostly `desktop.py` first-launch logic plus
-  installer UI for "(optional) GPU acceleration: 2.5 GB extra download".
-
-### 3. Real frontier eval corpus (HC3)
-
-**Why**: The hand-curated 14+14 samples catch obvious regressions but
-don't have statistical signal. A real benchmark would let us claim
-honest detector accuracy numbers and do A/B comparisons against
-ensemble-weight tweaks.
-
-**How** (researched April 2026):
-- [HC3 (Hello-SimpleAI/HC3)](https://huggingface.co/datasets/Hello-SimpleAI/HC3)
-  is the standard human-vs-ChatGPT corpus: ~37k human replies + ~37k
-  ChatGPT outputs, sourced from Reddit ELI5, Quora, StackExchange and
-  topic-tagged (medicine, finance, etc.).
-- License: **CC BY-SA**, redistributable with attribution. We can pull
-  a 500-1000 sample slice into `app/eval/samples/hc3_subset.json` and
-  ship it in the repo without legal risk.
-- The follow-up
-  [HC3 Plus](https://arxiv.org/abs/2309.02731) corpus (semantic-invariant
-  variants) is also CC BY-SA and would be a natural Phase 10 expansion
-  for paraphrasing-attack robustness testing.
-- Estimated effort: 1-2 days. Add an `app/eval/fetch_hc3.py` script that
-  downloads + samples + filters the corpus once, regenerate baseline,
-  bump `ACCURACY_TOLERANCE` from 0.10 toward 0.05 since signal will be
-  much stronger.
-
----
-
-## Phase 7 — what we shipped earlier
-
-Phase 7 answered two external-review demands: **rigor** (eval harness) and
-**integrity completeness** (provenance event-loss fixes).
-
-### 1. Provenance event-loss fixes
-Two real bugs in the "complete authorship proof" feature:
-
-**Bug A — tab close loses the last keystrokes.** The `beforeunload` handler
-only sealed the session; it never flushed the in-memory event queue. So
-buffered typing in the 2-second flush window was dropped while the
-session was still marked sealed. That quietly broke the "complete
-authorship" guarantee.
-- **Fix:** extended `POST /api/sessions/{id}/seal` to accept an optional
-  `{events: [...]}` body. The `beforeunload` beacon now includes the
-  drained queue, so the backend appends-then-seals atomically in one
-  request.
-
-**Bug B — transient backend hiccup on doc switch discards events.** `seal()`
-always proceeded to clear `sessionId`, and the follow-up `detach()`
-cleared the queue — even when `flush()` had failed and re-queued events.
-- **Fix:** `seal()` retries flush up to 3× with backoff; `detach()`
-  preserves `queue` so a doc switch during a brief network blip doesn't
-  silently drop events.
-
-Two new regression tests cover these in `test_provenance.py`.
-
-### 2. Evaluation harness (regression gate, not benchmark)
-`app/eval/` with:
-- `samples/human.json` — 8 labelled human samples (public-domain Austen +
-  Dickens excerpts plus synthetic casual-voice passages)
-- `samples/ai.json` — 8 deliberately AI-voiced passages heavy on the
-  usual "Moreover / Furthermore / it is important to note" markers
-- `samples/preserve.json` — 5 citation/quote/code/LaTeX round-trip cases
-- `runner.py` — loads the real detector, computes metrics, compares to
-  `baseline.json`, with an `--update-baseline` flag for the first run
-- `tests/test_eval.py` — pytest wrapper marked `@pytest.mark.eval`
-- `pytest.ini` now excludes `eval`-marked tests from the default run so
-  the fast suite stays fast; invoke the gate explicitly via `pytest -m eval`
-- `.github/workflows/eval.yml` runs the gate on main-branch merges only
-  (not every PR — the full detector load is ~30 s), with HF model cache
-
-We deliberately **did not commit a baseline.json**. Generate it yourself
-with `python -m app.eval.runner --update-baseline` on the machine you
-consider "known-good" and commit the output.
-
-Honest scope: this is a regression gate, not a frontier benchmark. The
-samples are small and curated; we're catching regressions, not proving
-absolute accuracy. Next iteration would pull from established benchmarks
-like HC3 or GPABenchmark.
-
-### 3. Playwright smoke tests
-- `frontend/playwright.config.ts` — `webServer` boots BOTH a FakeRegistry-
-  backed backend (via `run_test_server.py` — no HuggingFace, no Ollama)
-  AND the Next.js dev server, then tears them down after the run
-- `frontend/e2e/smoke.spec.ts` — two happy-path tests:
-  1. Create project → create document → type → detect → humanize → verify
-     output differs
-  2. Writing Report modal opens and displays chain-integrity badge
-- `run_test_server.py` is the backend counterpart — installs FakeRegistry
-  and patches OllamaRewriter at module-import time so lifespan fires
-  against fakes. Binds to port 8001 to coexist with a dev backend on 8000
-- `.github/workflows/e2e.yml` wires Playwright into CI for every
-  push + PR, uploads traces on failure
-
-### What's intentionally deferred (again)
-- **Real frontier benchmark** (HC3, etc.) — needs licence review + ~10×
-  more samples
-- **Authoring replay** (Grammarly-Authorship-style) — reconstruct document
-  state at arbitrary timestamp from the event stream. Doable with the
-  hash chain we already have, but scope-bounded to a future phase.
-- **Code signing** — Azure Trusted Signing ($10/mo) eliminates SmartScreen.
-  Still on the to-do list.
-- **CUDA torch swap on install** — `build.ps1` ships CPU torch; users with
-  NVIDIA GPUs swap manually per the README.
-
-### Net numbers
-- **69 tests** pass in 3.8 seconds offline (was 12 tests in Phase 0)
-- **2 eval tests** skipped unless `-m eval`
-- **2 Playwright specs** covering the critical user flows
-- **3 CI workflows**: fast tests (every push), E2E (every push), eval (main only)
-
-That's Phase 7.
+- ✅ Tiptap migration (Phase 9)
+- ✅ Rich-text revisions (Phase 10)
+- ✅ Frontend recorder unit tests (Phase 10)
+- ✅ HC3 corpus + auto-discovery (run-once script, ready)
+- ⏳ **CUDA inside the PyInstaller bundle** — `enable-cuda.ps1` works for
+  the dev venv but the `AIHumanizerSetup.exe` ships CPU torch. Plan:
+  ship CPU torch, on first launch detect `nvidia-smi`, download the
+  matching CUDA wheel into `%LOCALAPPDATA%\AIHumanizer\torch-cuda\`,
+  insert at the front of `sys.path` to shadow the bundled torch, then
+  restart the Python process. Estimated 3-4 days. Caveat from the
+  PyInstaller + PyTorch issue threads: parse the driver-reported CUDA
+  version and pick the highest-compatible wheel, otherwise DLL-load
+  failures on driver/wheel mismatches.
