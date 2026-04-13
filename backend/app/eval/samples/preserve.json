@@ -1,0 +1,27 @@
+[
+  {
+    "id": "preserve_citation_author_year",
+    "text": "Recent work [Smith 2024] demonstrates that transformer models scale well. The findings are consistent with earlier observations (Jones and Lee, 2023).",
+    "must_preserve": ["[Smith 2024]", "(Jones and Lee, 2023)"]
+  },
+  {
+    "id": "preserve_numeric_citation",
+    "text": "Several studies [1, 2, 3] have explored this direction, and more recent work [4-6] confirms the pattern.",
+    "must_preserve": ["[1, 2, 3]", "[4-6]"]
+  },
+  {
+    "id": "preserve_quote",
+    "text": "As Feynman famously said, \"The first principle is that you must not fool yourself — and you are the easiest person to fool.\" This remains valuable advice for researchers.",
+    "must_preserve": ["\"The first principle is that you must not fool yourself — and you are the easiest person to fool.\""]
+  },
+  {
+    "id": "preserve_code",
+    "text": "The algorithm is straightforward: call `model.forward(x)` and handle the output. For multi-GPU, wrap it in `torch.nn.DataParallel`.",
+    "must_preserve": ["`model.forward(x)`", "`torch.nn.DataParallel`"]
+  },
+  {
+    "id": "preserve_latex",
+    "text": "The key relation is $E = mc^2$, which follows from the invariant $$\\sum_i p_i^2 = \\text{const}$$ across frames.",
+    "must_preserve": ["$E = mc^2$", "$$\\sum_i p_i^2 = \\text{const}$$"]
+  }
+]

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "gutenberg_austen_01",
+    "source": "Pride and Prejudice, Jane Austen (Project Gutenberg, public domain)",
+    "text": "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife. However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered as the rightful property of some one or other of their daughters. My dear Mr. Bennet, said his lady to him one day, have you heard that Netherfield Park is let at last? Mr. Bennet replied that he had not."
+  },
+  {
+    "id": "casual_reddit_style_01",
+    "source": "synthetic casual prose",
+    "text": "ok so i tried that new ramen place on 3rd last night and honestly? mid. like the broth was fine, nothing special, but they charged $18 for what was basically a small bowl. service was slow too, waited almost 20 min for my food even though the place was half empty. not going back tbh, the spot on 5th is way better and cheaper. my friend said the same thing when she went last week."
+  },
+  {
+    "id": "casual_personal_essay_01",
+    "source": "synthetic personal voice",
+    "text": "My grandmother used to make this stew every Sunday. I don't remember all the ingredients anymore — mostly potatoes, I think, and whatever vegetables she had in the garden. What I do remember is the smell. It filled the whole house by noon and you could feel it even from the front porch. I tried to recreate it once, years after she passed, and it was a disaster. The kids ate around the meat. I think you need her specific hands, or maybe her specific stove. Some things just don't travel."
+  },
+  {
+    "id": "casual_blog_opinion_01",
+    "source": "synthetic first-person opinion piece",
+    "text": "Look, I get why people love the new phone. It's thinner, the camera's better, sure. But I've had mine for three years now and it still does everything I need. Texts, calls, maps, the occasional video of my dog. I don't need more pixels. I don't need a faster chip. Every year we're told the current model is somehow inadequate, and every year I look at my bill and think: what problem am I actually solving here? None, mostly. So I'm keeping it."
+  },
+  {
+    "id": "gutenberg_dickens_01",
+    "source": "A Tale of Two Cities, Charles Dickens (Project Gutenberg, public domain)",
+    "text": "It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness, it was the epoch of belief, it was the epoch of incredulity, it was the season of Light, it was the season of Darkness. In short, the period was so far like the present period, that some of its noisiest authorities insisted on its being received, for good or for evil, in the superlative degree of comparison only."
+  },
+  {
+    "id": "developer_bug_report_01",
+    "source": "synthetic informal bug-report-style",
+    "text": "So this is weird. I deploy the new worker and it runs fine for like six minutes, then it just stops processing messages. No errors in the logs. The process is still alive. Memory's fine. I checked. If I bounce it, it starts working again for another six minutes and then dies the same way. Something's off with the heartbeat I think. Or maybe the broker is timing out the consumer group? I don't know. Going to try upgrading the client library first."
+  },
+  {
+    "id": "academic_draft_rough_01",
+    "source": "synthetic rough academic draft",
+    "text": "The results are a bit more mixed than I expected. Group A did better on recall but worse on precision, which I didn't see in the pilot. I'm wondering if it's a training data issue or just noise — n is small. Need to re-run with the other seed to be sure. The Figure 3 numbers look off too; double-check the normalization before we call it a finding. If it holds up we probably have enough for a short paper but I want to talk to J before we commit to the framing."
+  },
+  {
+    "id": "voice_memo_transcript_01",
+    "source": "synthetic conversational transcript",
+    "text": "Yeah so uh, I talked to the contractor and he said the earliest they can start is mid-May, which, whatever, we can work with that. But the quote went up like fifteen percent from what he said in January, and I'm not thrilled about that. I asked him about it and he kind of shrugged, said materials, which, fine, but still. I'm going to get one more estimate before we sign anything. It's annoying but it's a lot of money."
+  }
+]

@@ -9,6 +9,7 @@ from ..schemas.provenance import (
     EventRead,
     EventsAppendRequest,
     EventsAppendResponse,
+    SealRequest,
     SessionRead,
     SessionStartRequest,
     VerificationResponse,
@@ -54,7 +55,30 @@ def append_events(
 
 
 @router.post("/sessions/{session_id}/seal", response_model=SessionRead)
-def seal_session(session_id: str, session: Session = Depends(get_session)):
+def seal_session(
+    session_id: str,
+    req: SealRequest | None = None,
+    session: Session = Depends(get_session),
+):
+    """Seal a session.  If the body includes pending events, append them
+    BEFORE sealing so the tail of the session is never lost on tab close.
+
+    Frontend uses this via `navigator.sendBeacon` on `beforeunload` —
+    a single atomic request that flushes the queue and seals.
+    """
+    if req and req.events:
+        events = [
+            {
+                "event_type": e.event_type,
+                "timestamp": e.timestamp,
+                "payload": e.payload,
+            }
+            for e in req.events
+        ]
+        appended, error = service.append_events(session, session_id, events)
+        if error and appended == 0:
+            raise HTTPException(status_code=400, detail=error)
+
     ps = service.seal_session(session, session_id)
     if ps is None:
         raise HTTPException(status_code=400, detail="Session not found or already sealed")

@@ -33,6 +33,14 @@ class EventsAppendResponse(BaseModel):
     error: Optional[str] = None
 
 
+class SealRequest(BaseModel):
+    """Optional payload for the seal endpoint — append these events first,
+    then seal atomically in the same transaction.  Used by the frontend's
+    `beforeunload` beacon so the tail of a session isn't lost on tab close."""
+
+    events: list[EventCreate] = Field(default_factory=list)
+
+
 class EventRead(BaseModel):
     id: str
     session_id: str

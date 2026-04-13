@@ -250,6 +250,58 @@ def test_delete_project_cascades_through_provenance(client):
     assert client.delete(f"/api/projects/{p['id']}").status_code == 200
 
 
+def test_seal_with_pending_events_appends_atomically(client):
+    """The /seal endpoint accepts optional events in the body — used by the
+    frontend's beforeunload beacon so the tail of a session isn't lost on
+    tab close.  Append happens FIRST, then the seal."""
+    doc_id = _make_doc(client)
+    session_id = _start_session(client, doc_id)
+
+    # Some earlier events already delivered
+    client.post(
+        f"/api/sessions/{session_id}/events",
+        json={"events": [{"event_type": "typed", "timestamp": 1, "payload": {"text": "early"}}]},
+    )
+
+    # Now the user closes the tab — beforeunload sends a seal request with
+    # the pending queue included.  Both should land on the chain.
+    r = client.post(
+        f"/api/sessions/{session_id}/seal",
+        json={
+            "events": [
+                {"event_type": "typed", "timestamp": 2, "payload": {"text": "last burst"}},
+                {"event_type": "typed", "timestamp": 3, "payload": {"text": "final keystrokes"}},
+            ]
+        },
+    )
+    assert r.status_code == 200
+    sealed = r.json()
+    assert sealed["ended_at"] is not None
+    assert sealed["final_hash"] is not None
+
+    # Both pre-seal and seal-payload events are on the chain
+    events = client.get(f"/api/sessions/{session_id}/events").json()
+    assert len(events) == 3
+    assert [e["payload"]["text"] for e in events] == [
+        "early",
+        "last burst",
+        "final keystrokes",
+    ]
+
+    # And the chain verifies cleanly (including the terminal-hash check)
+    v = client.get(f"/api/sessions/{session_id}/verify").json()
+    assert v["valid"] is True
+
+
+def test_seal_without_body_still_works(client):
+    """Backwards-compat: seal with no body (the existing doc-switch path)."""
+    doc_id = _make_doc(client)
+    session_id = _start_session(client, doc_id)
+    r = client.post(f"/api/sessions/{session_id}/seal")
+    assert r.status_code == 200
+    assert r.json()["ended_at"] is not None
+
+
 def test_get_active_session(client):
     doc_id = _make_doc(client)
     # No active session yet
