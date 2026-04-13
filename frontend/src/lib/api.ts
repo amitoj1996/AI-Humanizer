@@ -106,4 +106,36 @@ export const api = {
     post<ProvenanceSession>(`/api/sessions/${sessionId}/seal`, {}),
   getReport: (documentId: string) =>
     get<ProvenanceReport>(`/api/documents/${documentId}/provenance/report`),
+
+  // ---- Import / Export ----
+  importDocument: async (
+    projectId: string,
+    file: File,
+  ): Promise<{
+    document_id: string;
+    title: string;
+    source_type: string;
+    char_count: number;
+    warnings: string[];
+  }> => {
+    const form = new FormData();
+    form.append("project_id", projectId);
+    form.append("file", file);
+    const res = await fetch(`${BASE}/api/documents/import`, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      const payload = (await res.json().catch(() => ({}))) as {
+        detail?: string;
+      };
+      throw new Error(payload.detail ?? res.statusText);
+    }
+    return res.json();
+  },
+
+  exportDocumentUrl: (documentId: string, format: "md" | "txt" | "docx") =>
+    `${BASE}/api/documents/${documentId}/export?format=${format}`,
+  exportProvenanceUrl: (documentId: string, format: "md" | "docx") =>
+    `${BASE}/api/documents/${documentId}/provenance/export?format=${format}`,
 };

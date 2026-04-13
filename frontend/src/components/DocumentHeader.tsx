@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { useAppStore } from "../store/app";
 import { useDocumentsStore } from "../store/documents";
+import { ExportMenu } from "./ExportMenu";
 import { ProvenanceReport } from "./ProvenanceReport";
 
 export function DocumentHeader() {
@@ -64,6 +65,7 @@ export function DocumentHeader() {
         </h2>
       )}
       <div className="flex items-center gap-2">
+        <ExportMenu />
         <ProvenanceReport />
         <button
           onClick={handleSave}

@@ -15,6 +15,11 @@ cairosvg>=2.7.1
 # Persistence
 sqlmodel>=0.0.22
 
+# Document import / export
+pymupdf4llm>=0.0.17
+python-docx>=1.1.2
+python-multipart>=0.0.9
+
 # Testing
 pytest>=8.3
 pytest-asyncio>=0.24

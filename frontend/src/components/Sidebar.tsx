@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { recorder } from "../lib/provenance";
 import { useAppStore } from "../store/app";
 import { useDocumentsStore } from "../store/documents";
+import { ImportButton } from "./ImportButton";
 
 export function Sidebar() {
   const {
@@ -142,13 +143,16 @@ export function Sidebar() {
           <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
             Documents
           </span>
-          <button
-            onClick={handleNewDoc}
-            disabled={!currentProjectId}
-            className="text-xs text-blue-400 hover:text-blue-300 disabled:text-zinc-700 disabled:cursor-not-allowed"
-          >
-            + New
-          </button>
+          <div className="flex items-center gap-3">
+            <ImportButton />
+            <button
+              onClick={handleNewDoc}
+              disabled={!currentProjectId}
+              className="text-xs text-blue-400 hover:text-blue-300 disabled:text-zinc-700 disabled:cursor-not-allowed"
+            >
+              + New
+            </button>
+          </div>
         </div>
         <div className="space-y-0.5">
           {docs.length === 0 && currentProjectId && (
