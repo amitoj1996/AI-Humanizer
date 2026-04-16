@@ -101,7 +101,10 @@ class LinguisticAnalyzer:
         # --- Em-dash density (per 100 words) ---
         # Em-dashes (U+2014) are one of the strongest modern AI tells;
         # human writers rarely use more than one per page.
-        em_dash_count = text.count("\u2014") + text.count("\u2013")
+        # Count em-dashes only. En-dashes (U+2013) are legitimate
+        # typography for numeric ranges (pp. 3–5, 2024–2025) and would
+        # inflate the AI signal on perfectly human prose.
+        em_dash_count = text.count("\u2014")
         em_dash_density = em_dash_count / per_100
 
         # --- Score components (higher = more AI-like) ---

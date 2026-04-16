@@ -13,11 +13,16 @@
 #   - Aggressive: 140W each (~64% TDP, ~88% perf — noticeably slower)
 #
 # Usage:
-#   sudo ./scripts/gpu-power-tune.sh              # apply default 160W to all GPUs
-#   sudo ./scripts/gpu-power-tune.sh 150          # apply 150W to all GPUs
-#   sudo ./scripts/gpu-power-tune.sh 160 0        # apply 160W to GPU 0 only
-#   sudo ./scripts/gpu-power-tune.sh reset        # restore stock power limit
-#   ./scripts/gpu-power-tune.sh status            # show current limits (no sudo)
+#   sudo ./scripts/gpu-power-tune.sh                    # apply default 160W to all
+#   sudo ./scripts/gpu-power-tune.sh 150                # shortcut: apply 150W
+#   sudo ./scripts/gpu-power-tune.sh 160 0              # apply 160W to GPU 0 only
+#   sudo ./scripts/gpu-power-tune.sh apply 160          # explicit form
+#   sudo ./scripts/gpu-power-tune.sh apply 160 0        # explicit form, one GPU
+#   sudo ./scripts/gpu-power-tune.sh reset              # restore stock power limit
+#   ./scripts/gpu-power-tune.sh status                  # show current limits
+#
+# Unknown subcommands exit non-zero — this script mutates hardware state,
+# so a typo must fail loud, not silently power-cap every GPU.
 #
 # To persist across reboots, add a systemd unit — see Puget Systems guide
 # linked in repo docs.
@@ -49,19 +54,22 @@ case "$cmd" in
     ;;
   reset)
     if [[ $EUID -ne 0 ]]; then echo "error: reset needs sudo" >&2; exit 1; fi
-    # --power-limit without a value resets to default on most driver versions;
-    # portable approach is to query default and re-apply it.
-    while read -r idx _ _ default _ _ _; do
-      idx=${idx%,}; default=${default%,}
+    # Query only the two fields we need with a comma field-separator, so
+    # GPU names with spaces (e.g. "NVIDIA GeForce RTX 3070") don't break
+    # the parse.  `IFS=,` + `read -r` gives us clean CSV columns.
+    while IFS=, read -r idx default; do
+      idx=$(echo "$idx" | tr -d ' ')
+      default=$(echo "$default" | tr -d ' ')
+      [[ -z "$idx" || -z "$default" ]] && continue
       echo "resetting GPU $idx to ${default}W"
       nvidia-smi -i "$idx" -pl "$default"
-    done < <(show_status)
+    done < <(nvidia-smi --query-gpu=index,power.default_limit \
+                        --format=csv,noheader,nounits)
     ;;
-  apply|*)
-    limit="${1:-$DEFAULT_LIMIT}"
-    # If first arg wasn't numeric (e.g. 'apply'), fall back to default.
+  apply)
+    limit="${2:-$DEFAULT_LIMIT}"
     if ! [[ "$limit" =~ ^[0-9]+$ ]]; then limit="$DEFAULT_LIMIT"; fi
-    target_gpu="${2:-all}"
+    target_gpu="${3:-all}"
     if [[ $EUID -ne 0 ]]; then echo "error: apply needs sudo" >&2; exit 1; fi
 
     echo "applying ${limit}W power limit to GPU ${target_gpu}"
@@ -72,5 +80,16 @@ case "$cmd" in
     fi
     echo "--- new state ---"
     show_status
+    ;;
+  *)
+    # Back-compat shortcut: a bare number is treated as an apply limit
+    # (`sudo ./gpu-power-tune.sh 150` was the documented form). Anything
+    # else is a typo — refuse to touch hardware on ambiguous input.
+    if [[ "$cmd" =~ ^[0-9]+$ ]]; then
+      exec "$0" apply "$cmd" "${2:-all}"
+    fi
+    echo "error: unknown subcommand '$cmd'" >&2
+    echo "usage: $0 [apply [<watts> [<gpu_idx>|all]] | reset | status]" >&2
+    exit 2
     ;;
 esac

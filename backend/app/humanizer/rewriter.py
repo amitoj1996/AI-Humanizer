@@ -195,10 +195,14 @@ class OllamaRewriter:
         if result.startswith('"') and result.endswith('"'):
             result = result[1:-1]
 
-        # Em-dashes are a strong AI tell as of 2025-2026 (GPTZero keys
-        # on them); the model may emit them despite the system rules.
-        # Absorb surrounding whitespace so "a — b" becomes "a, b".
-        result = re.sub(r"\s*[\u2014\u2013]\s*", ", ", result)
+        # Em-dashes (U+2014) are a strong AI tell as of 2025-2026
+        # (GPTZero keys on them); the model may emit them despite the
+        # system rules. Absorb surrounding whitespace so "a — b" → "a, b".
+        #
+        # En-dashes (U+2013) are NOT stripped: they carry meaning in
+        # numeric ranges (10–12%, 2024–2025, pp. 3–5) and replacing them
+        # with commas would silently corrupt the text.
+        result = re.sub(r"\s*\u2014\s*", ", ", result)
         result = re.sub(r",\s*,", ",", result)
         return result
 

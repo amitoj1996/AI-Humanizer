@@ -141,12 +141,16 @@ class TextPostProcessor:
 
     @staticmethod
     def _strip_em_dashes(text: str) -> str:
-        """Remove em-dashes (U+2014) and en-dashes (U+2013) the rewriter
-        may have slipped in. These are strong AI-tells in current detectors.
+        """Remove em-dashes (U+2014) the rewriter may have slipped in.
+        Em-dashes are one of the strongest AI tells in current detectors.
 
         Absorb surrounding whitespace so `a — b` becomes `a, b` (not
         `a ,  b`), and collapse accidental `, ,` runs.
+
+        En-dashes (U+2013) are intentionally NOT touched: they are the
+        correct typography for numeric ranges (10–12%, pp. 3–5,
+        2024–2025) and replacing them with commas would corrupt meaning.
         """
-        text = re.sub(r"\s*[\u2014\u2013]\s*", ", ", text)
+        text = re.sub(r"\s*\u2014\s*", ", ", text)
         text = re.sub(r",\s*,", ",", text)
         return text
