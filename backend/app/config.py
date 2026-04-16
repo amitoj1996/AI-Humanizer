@@ -54,12 +54,41 @@ CLASSIFIER_MODEL = os.environ.get(
 )
 
 # Perplexity / burstiness scoring via a small modern base LM.
-# Qwen 3.5-4B-Base is the current official small-base release; its
-# tokenizer and natural-language fluency are the best in its class.
-# Tune down to Qwen/Qwen3.5-0.8B (or similar) on CPU-only boxes where
-# 4 B forward passes per sentence become the bottleneck.
+# VRAM math matters here: the model is loaded alongside Ollama on the
+# same GPUs, and in bf16 the weights occupy ~2 bytes per parameter.
+#
+#   Model         | bf16 weights | Fits on 8 GB (3070/4060Ti) alongside
+#   --------------+--------------+-----------------------------------
+#   Qwen3.5-0.8B  | ~1.6 GB      | easily
+#   Qwen3.5-2B    | ~4.0 GB      | yes, with ~4 GB headroom   <-- default
+#   Qwen3.5-4B    | ~8.0 GB      | NO — fills the card, OOMs
+#
+# The 4B default was wrong: it exhausts VRAM on any 8 GB card, and
+# even fp32 (the previous default) was 16 GB which also never fit.
+# For higher-fidelity perplexity on the 4B model, enable 4-bit
+# quantisation via AI_HUMANIZER_QUANTIZE=4bit (needs bitsandbytes).
 PERPLEXITY_MODEL = os.environ.get(
-    "AI_HUMANIZER_PERPLEXITY_MODEL", "Qwen/Qwen3.5-4B-Base"
+    "AI_HUMANIZER_PERPLEXITY_MODEL", "Qwen/Qwen3.5-2B-Base"
+)
+
+# Optional weight quantisation for perplexity model — currently "4bit"
+# or "8bit" (both require `pip install bitsandbytes`), or "" (default,
+# use bf16/fp32 from the dtype branch). 4bit lets users fit Qwen3.5-4B
+# into ~2.5 GB and keep higher detector fidelity on a single 8 GB card.
+PERPLEXITY_QUANTIZE = os.environ.get("AI_HUMANIZER_QUANTIZE", "").lower()
+
+# Avoid allocator fragmentation when two models (classifier + perplexity)
+# grow/shrink on the same GPU — per PyTorch docs this is safe-default on
+# Ampere+ and costs nothing if the workload doesn't fragment.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+# Batch size for sentence-transformer encodes. Sentence Transformers'
+# own docs note this is the single biggest knob for throughput on batched
+# workloads (best-of-N candidate scoring here). 32 is the library default
+# and fits in <100 MB for MiniLM-L6; raise to 64/128 on GPU if you have
+# headroom, lower to 8/16 on CPU to avoid padding waste.
+SIMILARITY_BATCH_SIZE = int(
+    os.environ.get("AI_HUMANIZER_SIMILARITY_BATCH_SIZE", "32")
 )
 
 # ---------------------------------------------------------------------------

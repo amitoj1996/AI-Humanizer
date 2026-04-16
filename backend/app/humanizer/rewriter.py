@@ -1,9 +1,12 @@
+import logging
 import re
 
 import httpx
 
 from ..config import OLLAMA_BASE_URL, OLLAMA_KEEP_ALIVE, OLLAMA_MODEL
 from . import preserve
+
+log = logging.getLogger(__name__)
 
 # Module-level shared httpx client. HTTPX docs + FastAPI guidance: one
 # long-lived AsyncClient per process shares a connection pool and avoids
@@ -145,6 +148,8 @@ class OllamaRewriter:
         temperature: float = 0.85,
         top_p: float = 0.92,
         model: str | None = None,
+        num_ctx: int | None = None,
+        num_predict: int | None = None,
     ) -> str:
         system = TONE_SYSTEM_PROMPTS.get(tone, TONE_SYSTEM_PROMPTS["general"])
         if preserve.has_placeholders(text):
@@ -161,6 +166,25 @@ class OllamaRewriter:
             {"role": "user", "content": prompt},
         ]
 
+        # Ollama options:
+        # - num_ctx: size of the input context window. Default 4096 is
+        #   generous for full-document rewrites but wasteful for single
+        #   sentences; smaller context frees VRAM for concurrent requests
+        #   (OLLAMA_NUM_PARALLEL * num_ctx is the scaling term per the
+        #   Ollama FAQ).
+        # - num_predict: cap on tokens generated. Shorter caps cut
+        #   eval_duration proportionally — the dominant cost for short
+        #   inputs.  Callers in sentence mode pass tight caps; full-text
+        #   mode leaves them open.
+        options: dict = {
+            "temperature": temperature,
+            "top_p": top_p,
+            "repeat_penalty": 1.15,
+            "num_predict": num_predict if num_predict is not None else 4096,
+        }
+        if num_ctx is not None:
+            options["num_ctx"] = num_ctx
+
         client = _get_shared_client()
         response = await client.post(
             f"{self.base_url}/api/chat",
@@ -175,16 +199,29 @@ class OllamaRewriter:
                 # Set via env AI_HUMANIZER_OLLAMA_KEEP_ALIVE (e.g. "30m",
                 # "-1" for permanent).
                 "keep_alive": OLLAMA_KEEP_ALIVE,
-                "options": {
-                    "temperature": temperature,
-                    "top_p": top_p,
-                    "repeat_penalty": 1.15,
-                    "num_predict": 4096,
-                },
+                "options": options,
             },
         )
         response.raise_for_status()
-        result = response.json()["message"]["content"].strip()
+        body = response.json()
+        result = body["message"]["content"].strip()
+
+        # Log Ollama's own timing fields so we can tell where latency
+        # goes. `load_duration` = time to bring the model into memory
+        # (0 if already resident); `prompt_eval_*` = processing the
+        # input; `eval_*` = token generation. All in nanoseconds per
+        # the Ollama API spec.
+        if log.isEnabledFor(logging.DEBUG):
+            load_ms = body.get("load_duration", 0) / 1e6
+            pe_ms = body.get("prompt_eval_duration", 0) / 1e6
+            ev_ms = body.get("eval_duration", 0) / 1e6
+            pe_tok = body.get("prompt_eval_count", 0)
+            ev_tok = body.get("eval_count", 0)
+            log.debug(
+                "ollama %s load=%.0fms prompt=%.0fms/%dtok gen=%.0fms/%dtok",
+                model or self.model,
+                load_ms, pe_ms, pe_tok, ev_ms, ev_tok,
+            )
 
         # Strip thinking tags if model still includes them
         result = re.sub(

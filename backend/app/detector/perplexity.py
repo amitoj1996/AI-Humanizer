@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from ..config import PERPLEXITY_DEVICE, PERPLEXITY_MODEL
+from ..config import PERPLEXITY_DEVICE, PERPLEXITY_MODEL, PERPLEXITY_QUANTIZE
 
 
 class PerplexityAnalyzer:
@@ -30,19 +30,56 @@ class PerplexityAnalyzer:
         else:
             dtype = torch.float32
         self.dtype = dtype
+
+        # Optional bitsandbytes quantisation — lets users fit larger
+        # perplexity models (e.g. Qwen3.5-4B at ~2.5 GB in 4bit) on an
+        # 8 GB card. quantised models must be device-placed via
+        # device_map; .to() is not supported on bnb weights.
+        quant_config = None
+        if PERPLEXITY_QUANTIZE in ("4bit", "8bit"):
+            try:
+                from transformers import BitsAndBytesConfig
+
+                if PERPLEXITY_QUANTIZE == "4bit":
+                    quant_config = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_use_double_quant=True,
+                        bnb_4bit_quant_type="nf4",
+                        bnb_4bit_compute_dtype=dtype,
+                    )
+                else:
+                    quant_config = BitsAndBytesConfig(load_in_8bit=True)
+            except ImportError:
+                print(
+                    "  WARNING: AI_HUMANIZER_QUANTIZE set but bitsandbytes "
+                    "is not installed; falling back to bf16."
+                )
+
+        load_kwargs: dict = {"trust_remote_code": True}
+        if quant_config is not None:
+            load_kwargs["quantization_config"] = quant_config
+            load_kwargs["device_map"] = {"": PERPLEXITY_DEVICE}
+        else:
+            load_kwargs["dtype"] = dtype
+            load_kwargs["attn_implementation"] = "sdpa"
+
         try:
             self.model = AutoModelForCausalLM.from_pretrained(
-                PERPLEXITY_MODEL,
-                trust_remote_code=True,
-                dtype=dtype,
-                attn_implementation="sdpa",
-            ).to(PERPLEXITY_DEVICE)
+                PERPLEXITY_MODEL, **load_kwargs
+            )
         except (TypeError, ValueError):
-            # Older transformers use `torch_dtype=`, and some models reject
-            # an explicit `attn_implementation` — retry without those.
+            # Older transformers use `torch_dtype=` and some models
+            # reject `attn_implementation`; retry with the minimal set.
+            fallback = {"trust_remote_code": True, "torch_dtype": dtype}
+            if quant_config is not None:
+                fallback["quantization_config"] = quant_config
+                fallback["device_map"] = {"": PERPLEXITY_DEVICE}
             self.model = AutoModelForCausalLM.from_pretrained(
-                PERPLEXITY_MODEL, trust_remote_code=True, torch_dtype=dtype
-            ).to(PERPLEXITY_DEVICE)
+                PERPLEXITY_MODEL, **fallback
+            )
+
+        if quant_config is None:
+            self.model = self.model.to(PERPLEXITY_DEVICE)
         self.model.eval()
 
     def compute_perplexity(self, text: str) -> float:
@@ -51,7 +88,9 @@ class PerplexityAnalyzer:
         ).to(PERPLEXITY_DEVICE)
         if inputs["input_ids"].shape[1] < 2:
             return 0.0
-        with torch.no_grad():
+        # inference_mode is strictly faster than no_grad on hot inference
+        # paths (PyTorch docs). Same correctness, fewer autograd hooks.
+        with torch.inference_mode():
             outputs = self.model(**inputs, labels=inputs["input_ids"])
         # Promote to fp32 before exp — bf16's 7-bit mantissa overflows
         # easily once the loss is above ~11, giving nonsense perplexities.

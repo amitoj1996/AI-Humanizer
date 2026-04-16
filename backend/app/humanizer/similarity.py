@@ -1,6 +1,8 @@
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
+from ..config import SIMILARITY_BATCH_SIZE
+
 
 class SimilarityChecker:
     """Verify meaning preservation after humanization using
@@ -25,7 +27,11 @@ class SimilarityChecker:
         Pre-normalizing means cosine similarity is a plain dot product,
         which is measurably faster when running against many candidates.
         """
-        emb = self.model.encode(text, normalize_embeddings=True)
+        emb = self.model.encode(
+            text,
+            normalize_embeddings=True,
+            batch_size=SIMILARITY_BATCH_SIZE,
+        )
         return np.asarray(emb, dtype=np.float32)
 
     def cosine_against(self, precomputed_original: np.ndarray, candidate: str) -> float:
@@ -44,7 +50,11 @@ class SimilarityChecker:
         """
         if not candidates:
             return []
-        embs = self.model.encode(candidates, normalize_embeddings=True)
+        embs = self.model.encode(
+            candidates,
+            normalize_embeddings=True,
+            batch_size=SIMILARITY_BATCH_SIZE,
+        )
         # embs shape: (N, dim) — dot each row with the cached vector.
         sims = np.asarray(embs, dtype=np.float32) @ precomputed_original
         return [float(round(float(s), 4)) for s in sims]
@@ -52,7 +62,9 @@ class SimilarityChecker:
     def score(self, original: str, humanized: str) -> float:
         # Batched encode + normalize — one GPU call instead of two.
         embeddings = self.model.encode(
-            [original, humanized], normalize_embeddings=True
+            [original, humanized],
+            normalize_embeddings=True,
+            batch_size=SIMILARITY_BATCH_SIZE,
         )
         return float(round(float(np.dot(embeddings[0], embeddings[1])), 4))
 
@@ -63,7 +75,11 @@ class SimilarityChecker:
         if not originals or not humanized:
             return []
         all_texts = originals + humanized
-        embs = self.model.encode(all_texts, normalize_embeddings=True)
+        embs = self.model.encode(
+            all_texts,
+            normalize_embeddings=True,
+            batch_size=SIMILARITY_BATCH_SIZE,
+        )
         n = len(originals)
         scores = []
         for i in range(min(n, len(humanized))):

@@ -45,7 +45,10 @@ class AIClassifier:
             padding=True,
         ).to(CLASSIFIER_DEVICE)
 
-        with torch.no_grad():
+        # inference_mode is strictly faster than no_grad on hot inference
+        # paths — it also disables view tracking and version-counter bumps
+        # that no_grad still pays for. No correctness change.
+        with torch.inference_mode():
             outputs = self.model(**inputs)
 
         probs = torch.softmax(outputs.logits, dim=-1)

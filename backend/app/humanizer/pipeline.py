@@ -280,12 +280,23 @@ class HumanizationPipeline:
                         i % len(self.candidate_models)
                     ]
                     try:
+                        # Sentence rewrites have tight input+output token
+                        # budgets compared to full-document mode. Smaller
+                        # num_ctx frees VRAM and lets Ollama run more
+                        # concurrent requests safely; smaller num_predict
+                        # caps generation at roughly 4x the input length,
+                        # which is plenty for a paraphrase and avoids the
+                        # default 4096-token overshoot that dominates
+                        # eval_duration on short inputs.
+                        sent_tok_est = max(32, len(protected_sent) // 3)
                         rewritten = await self.rewriter.rewrite(
                             protected_sent,
                             strength=strength,
                             tone=tone,
                             temperature=temps[min(i, len(temps) - 1)],
                             model=candidate_model,
+                            num_ctx=1024,
+                            num_predict=min(512, sent_tok_est * 4),
                         )
                     except Exception:
                         return None
