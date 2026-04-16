@@ -5,9 +5,9 @@ import type { Breakdown } from "../lib/types";
 export function BreakdownCard({ breakdown }: { breakdown: Breakdown }) {
   const rows = [
     {
-      label: "RoBERTa Classifier",
+      label: "e5-small-lora Classifier",
       value: breakdown.classifier.ai_probability,
-      desc: "Fine-tuned transformer model",
+      desc: "LoRA-tuned e5-small (near-SOTA on RAID)",
     },
     {
       label: "Perplexity Signal",
