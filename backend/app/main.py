@@ -28,6 +28,7 @@ from .api import (
 )
 from .db.connection import init_db
 from .deps import get_registry
+from .humanizer.rewriter import aclose_shared_client
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI):
     print("Ready!")
     yield
     print("Shutting down.")
+    await aclose_shared_client()
 
 
 app = FastAPI(title="AI Humanizer & Detector", version="2.0.0", lifespan=lifespan)

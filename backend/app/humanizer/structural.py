@@ -108,7 +108,9 @@ class StructuralRewriter:
 
         result = []
         i = 0
-        connectors = ["and", "plus", "—", "which means", "so"]
+        # No em-dashes here — they are a strong AI-detection unigram as
+        # of 2025-2026 and would defeat the rest of the humanization pass.
+        connectors = ["and", "plus", "which means", "so", "because"]
 
         while i < len(sentences):
             sent = sentences[i]

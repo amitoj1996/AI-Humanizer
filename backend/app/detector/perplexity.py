@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from ..config import DEVICE, PERPLEXITY_MODEL
+from ..config import PERPLEXITY_DEVICE, PERPLEXITY_MODEL
 
 
 class PerplexityAnalyzer:
@@ -18,20 +18,44 @@ class PerplexityAnalyzer:
         self.tokenizer = AutoTokenizer.from_pretrained(
             PERPLEXITY_MODEL, trust_remote_code=True
         )
-        self.model = AutoModelForCausalLM.from_pretrained(
-            PERPLEXITY_MODEL, trust_remote_code=True, torch_dtype=torch.float32
-        ).to(DEVICE)
+        # Use bf16 on CUDA (Ampere+ supported — e.g. 2xRTX 3070) for ~2x
+        # throughput and half the VRAM versus fp32. bf16 is preferred
+        # over fp16 for its wider dynamic range, which matters when
+        # exponentiating loss to get perplexity. SDPA attention is the
+        # PyTorch 2.x default for AutoModel and requires no extra deps.
+        # On MPS/CPU we fall back to fp32 — bf16 perf is either unsupported
+        # or slower.
+        if PERPLEXITY_DEVICE.type == "cuda":
+            dtype = torch.bfloat16
+        else:
+            dtype = torch.float32
+        self.dtype = dtype
+        try:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                PERPLEXITY_MODEL,
+                trust_remote_code=True,
+                dtype=dtype,
+                attn_implementation="sdpa",
+            ).to(PERPLEXITY_DEVICE)
+        except (TypeError, ValueError):
+            # Older transformers use `torch_dtype=`, and some models reject
+            # an explicit `attn_implementation` — retry without those.
+            self.model = AutoModelForCausalLM.from_pretrained(
+                PERPLEXITY_MODEL, trust_remote_code=True, torch_dtype=dtype
+            ).to(PERPLEXITY_DEVICE)
         self.model.eval()
 
     def compute_perplexity(self, text: str) -> float:
         inputs = self.tokenizer(
             text, return_tensors="pt", truncation=True, max_length=1024
-        ).to(DEVICE)
+        ).to(PERPLEXITY_DEVICE)
         if inputs["input_ids"].shape[1] < 2:
             return 0.0
         with torch.no_grad():
             outputs = self.model(**inputs, labels=inputs["input_ids"])
-        return torch.exp(outputs.loss).item()
+        # Promote to fp32 before exp — bf16's 7-bit mantissa overflows
+        # easily once the loss is above ~11, giving nonsense perplexities.
+        return torch.exp(outputs.loss.float()).item()
 
     def compute_burstiness(self, text: str) -> float:
         sentences = re.split(r"[.!?]+", text)
