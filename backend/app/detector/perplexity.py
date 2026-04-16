@@ -8,7 +8,11 @@ from ..config import PERPLEXITY_DEVICE, PERPLEXITY_MODEL, PERPLEXITY_QUANTIZE
 
 
 class PerplexityAnalyzer:
-    """Compute perplexity and burstiness using a modern causal LM (Qwen2.5-0.5B).
+    """Compute perplexity and burstiness using a modern causal LM.
+
+    Model is read from config.PERPLEXITY_MODEL at init time (currently
+    Qwen/Qwen3.5-2B-Base by default; override with env var or enable
+    AI_HUMANIZER_QUANTIZE=4bit to fit larger models on 8 GB cards).
 
     - Perplexity: how predictable the text is.  AI text → low perplexity.
     - Burstiness: variance of per-sentence perplexity.  AI text → low burstiness.

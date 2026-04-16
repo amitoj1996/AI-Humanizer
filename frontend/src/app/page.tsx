@@ -52,7 +52,7 @@ export default function Home() {
       <footer className="border-t border-zinc-800 px-6 py-2">
         <p className="text-center text-xs text-zinc-600">
           Runs 100% locally · Tiptap/ProseMirror editor · e5-small-lora + Qwen
-          3.5-4B detection · Ollama (qwen3.5:9b) rewriting · SHA-256 provenance
+          3.5-2B detection · Ollama (qwen3.5:9b) rewriting · SHA-256 provenance
           chain
         </p>
       </footer>

@@ -166,13 +166,17 @@ The first-run download is:
 
 | Model | Size | Purpose |
 |---|---|---|
-| `roberta-base-openai-detector` | ~500 MB | Binary AI/human classifier |
-| `Qwen/Qwen3.5-4B-Base` | ~8 GB on disk | Perplexity / burstiness analysis |
+| `MayZhou/e5-small-lora-ai-generated-detector` | ~130 MB | Binary AI/human classifier |
+| `Qwen/Qwen3.5-2B-Base` | ~4 GB on disk | Perplexity / burstiness analysis |
 | `sentence-transformers/all-MiniLM-L6-v2` | ~90 MB | Meaning-preservation similarity |
 
-On a slow connection, the 4B perplexity model is the bottleneck. On a
-4 GB-or-less GPU, switch to the smaller variant via env var (see
-[Environment variables](#environment-variables)).
+On a slow connection, the perplexity model is the bottleneck. On a
+4 GB-or-less GPU, switch to `Qwen/Qwen3.5-0.8B` via env var (see
+[Environment variables](#environment-variables)). On an 8 GB GPU with
+headroom, you can enable `AI_HUMANIZER_QUANTIZE=4bit` and bump
+`AI_HUMANIZER_PERPLEXITY_MODEL` to `Qwen/Qwen3.5-4B-Base` — the 4-bit
+NF4 quantisation keeps it under ~2.5 GB VRAM while recovering most of
+the accuracy. Requires `pip install bitsandbytes`.
 
 **Window B — frontend**
 ```powershell
@@ -393,8 +397,17 @@ Override defaults without touching config files:
 | Variable | Default | Purpose |
 |---|---|---|
 | `AI_HUMANIZER_OLLAMA_MODEL` | `qwen3.5:9b` | Rewriter tag |
-| `AI_HUMANIZER_PERPLEXITY_MODEL` | `Qwen/Qwen3.5-4B-Base` | Perplexity LM (use `Qwen/Qwen3.5-0.8B` on small-VRAM machines) |
-| `AI_HUMANIZER_CLASSIFIER_MODEL` | `roberta-base-openai-detector` | Binary AI classifier |
+| `AI_HUMANIZER_CANDIDATE_MODELS` | `<OLLAMA_MODEL>,gemma4:latest` | Comma-separated models rotated in sentence-mode best-of-N |
+| `AI_HUMANIZER_OLLAMA_KEEP_ALIVE` | `30m` | Ollama keep_alive (e.g. `-1` to pin, `0` to unload immediately) |
+| `AI_HUMANIZER_PERPLEXITY_MODEL` | `Qwen/Qwen3.5-2B-Base` | Perplexity LM (use `Qwen/Qwen3.5-0.8B` on small-VRAM machines) |
+| `AI_HUMANIZER_QUANTIZE` | — | Set to `4bit` or `8bit` to load perplexity LM via bitsandbytes (fits Qwen3.5-4B on an 8 GB card) |
+| `AI_HUMANIZER_CLASSIFIER_MODEL` | `MayZhou/e5-small-lora-ai-generated-detector` | Binary AI classifier |
+| `AI_HUMANIZER_CLASSIFIER_DEVICE` | auto | e.g. `cuda:1` to pin classifier to a specific GPU |
+| `AI_HUMANIZER_PERPLEXITY_DEVICE` | auto | e.g. `cuda:0` to pin perplexity LM |
+| `AI_HUMANIZER_COMPILE` | `0` | Set to `1` to enable `torch.compile` on the classifier |
+| `AI_HUMANIZER_SIMILARITY_BATCH_SIZE` | `32` | Sentence-transformers encode batch size |
+| `AI_HUMANIZER_MAX_CONCURRENT_REWRITES` | # of candidate models | Per-sentence rewrite concurrency cap |
+| `AI_HUMANIZER_MIN_SIMILARITY` | `0.82` | Cosine similarity gate for sentence-mode candidates |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API host |
 | `AI_HUMANIZER_DATA_DIR` | `%LOCALAPPDATA%\AIHumanizer` | App data root |
 | `AI_HUMANIZER_DB_PATH` | `<DATA_DIR>\aih.db` | SQLite DB path |
