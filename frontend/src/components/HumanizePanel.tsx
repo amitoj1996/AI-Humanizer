@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../lib/api";
 import { recorder } from "../lib/provenance";
@@ -190,10 +190,74 @@ export function HumanizeControls() {
   );
 }
 
+// Ordered hints roughly matching the sentence-mode pipeline stages.
+// We can't report true % progress (the backend returns one big JSON),
+// but cycling messages signal "something is happening" and give users
+// a mental model of where the time goes.
+const HUMANIZE_STAGES = [
+  "Warming up the rewriter model…",
+  "Generating candidate rewrites…",
+  "Rotating through candidate models…",
+  "Scoring candidates for AI signal…",
+  "Checking meaning preservation…",
+  "Selecting the best rewrite per sentence…",
+  "Re-running detection on the final output…",
+];
+
+function HumanizeProgress() {
+  const [elapsed, setElapsed] = useState(0);
+  const [stageIdx, setStageIdx] = useState(0);
+
+  useEffect(() => {
+    const start = Date.now();
+    const tick = setInterval(() => {
+      const secs = Math.floor((Date.now() - start) / 1000);
+      setElapsed(secs);
+      // Advance stage every ~5s but cap at the last one so the user
+      // isn't told we're "finalizing" at t=2s.
+      setStageIdx(Math.min(HUMANIZE_STAGES.length - 1, Math.floor(secs / 5)));
+    }, 250);
+    return () => clearInterval(tick);
+  }, []);
+
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  const elapsedLabel = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+  return (
+    <div
+      className="bg-zinc-900 rounded-xl border border-zinc-800 p-6 space-y-4"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Humanizing…</h2>
+        <span className="text-xs font-mono text-zinc-400 tabular-nums">
+          {elapsedLabel} elapsed
+        </span>
+      </div>
+
+      {/* Indeterminate progress — a single bar that loops right-to-left.
+          The underlying work isn't streamable (one POST returning the
+          whole result), so this intentionally doesn't advertise a %. */}
+      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+        <div className="h-full w-1/3 bg-blue-500/80 rounded-full animate-[progressSlide_1.4s_ease-in-out_infinite]" />
+      </div>
+
+      <p className="text-sm text-zinc-400">{HUMANIZE_STAGES[stageIdx]}</p>
+      <p className="text-xs text-zinc-600">
+        Sentence-level humanization runs N candidates per sentence; on a
+        typical doc this takes 15-60s depending on model and doc length.
+      </p>
+    </div>
+  );
+}
+
 /** Right-column results for the Humanize tab. */
 export function HumanizeResults() {
   const { humanizeResult, loading } = useAppStore();
 
+  if (loading === "humanize") return <HumanizeProgress />;
   if (loading || !humanizeResult) return null;
 
   return (
@@ -236,35 +300,43 @@ export function HumanizeResults() {
       </div>
 
       {/* Per-sentence details */}
-      {humanizeResult.sentence_details && (
-        <div className="space-y-1.5">
-          <p className="text-xs text-zinc-500 font-medium">Per-Sentence Results</p>
-          {humanizeResult.sentence_details
-            .filter((d) => !d.skipped)
-            .map((d, i) => (
-              <div key={i} className="bg-zinc-800/30 rounded-lg px-3 py-2 space-y-1">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-xs text-zinc-500 line-through leading-relaxed flex-1">
-                    {d.original}
-                  </p>
-                  <span className="text-xs font-mono text-red-400 whitespace-nowrap">
-                    {d.original_ai_score !== null
-                      ? `${Math.round(d.original_ai_score * 100)}%`
-                      : "—"}
-                  </span>
+      {humanizeResult.sentence_details && (() => {
+        const rows = humanizeResult.sentence_details.filter((d) => !d.skipped);
+        return (
+          <div>
+            <p className="text-xs text-zinc-500 font-medium mb-2">
+              Per-Sentence Results{" "}
+              <span className="text-zinc-600">· {rows.length} rewritten</span>
+            </p>
+            {/* Cap + internal scroll matches SentenceHeatmap — long docs
+                shouldn't push the Final Output off-screen. */}
+            <div className="space-y-1.5 max-h-[50vh] overflow-y-auto overscroll-contain pr-1">
+              {rows.map((d, i) => (
+                <div key={i} className="bg-zinc-800/30 rounded-lg px-3 py-2 space-y-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-xs text-zinc-500 line-through leading-relaxed flex-1">
+                      {d.original}
+                    </p>
+                    <span className="text-xs font-mono text-red-400 whitespace-nowrap">
+                      {d.original_ai_score !== null
+                        ? `${Math.round(d.original_ai_score * 100)}%`
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-sm text-zinc-300 leading-relaxed flex-1">{d.humanized}</p>
+                    <span className="text-xs font-mono text-green-400 whitespace-nowrap">
+                      {d.best_ai_score !== null
+                        ? `${Math.round(d.best_ai_score * 100)}%`
+                        : "—"}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-sm text-zinc-300 leading-relaxed flex-1">{d.humanized}</p>
-                  <span className="text-xs font-mono text-green-400 whitespace-nowrap">
-                    {d.best_ai_score !== null
-                      ? `${Math.round(d.best_ai_score * 100)}%`
-                      : "—"}
-                  </span>
-                </div>
-              </div>
-            ))}
-        </div>
-      )}
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Iteration log */}
       {humanizeResult.iterations && humanizeResult.iterations.length > 0 && (
@@ -295,7 +367,7 @@ export function HumanizeResults() {
             Copy
           </button>
         </div>
-        <div className="bg-zinc-800/50 rounded-lg p-4 text-sm leading-relaxed text-zinc-300 max-h-64 overflow-y-auto whitespace-pre-wrap">
+        <div className="bg-zinc-800/50 rounded-lg p-4 text-sm leading-relaxed text-zinc-300 max-h-[50vh] overflow-y-auto overscroll-contain whitespace-pre-wrap">
           {humanizeResult.humanized}
         </div>
       </div>

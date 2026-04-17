@@ -61,8 +61,11 @@ export function TiptapEditor() {
     editorProps: {
       attributes: {
         // Apply our existing textarea styling to the contenteditable.
+        // `max-h-[60vh] overflow-y-auto` caps the growth and lets long
+        // pastes scroll internally so the page layout stays stable;
+        // `overscroll-contain` stops scroll-chaining into the page.
         class:
-          "min-h-[18rem] outline-none px-4 py-3 text-sm leading-relaxed prose prose-invert prose-zinc max-w-none",
+          "min-h-[18rem] max-h-[60vh] overflow-y-auto overscroll-contain outline-none px-4 py-3 text-sm leading-relaxed prose prose-invert prose-zinc max-w-none",
         // Important for Playwright + accessibility — the placeholder + the
         // role mean queries like getByRole("textbox") continue to find
         // the editor.
@@ -120,7 +123,7 @@ export function TiptapEditor() {
     return (
       <div
         ref={containerRef}
-        className="relative min-h-[18rem] bg-zinc-900 border border-zinc-800 rounded-xl"
+        className="relative min-h-[18rem] max-h-[60vh] bg-zinc-900 border border-zinc-800 rounded-xl"
       />
     );
   }
@@ -131,8 +134,10 @@ export function TiptapEditor() {
       className="relative bg-zinc-900 border border-zinc-800 rounded-xl focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500/50"
     >
       <EditorContent editor={editor} />
-      <span className="absolute bottom-3 right-3 text-xs text-zinc-600 pointer-events-none">
-        {wordCount} words
+      {/* Raised contrast + frosted backdrop so the counter stays legible
+          when the editor has scrolled content behind it. */}
+      <span className="absolute bottom-3 right-3 text-xs text-zinc-300 pointer-events-none bg-zinc-900/80 backdrop-blur-sm px-2 py-0.5 rounded-md border border-zinc-800/80 tabular-nums">
+        {wordCount.toLocaleString()} words
       </span>
     </div>
   );

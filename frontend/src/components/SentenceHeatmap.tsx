@@ -4,9 +4,16 @@ import type { SentenceScore } from "../lib/types";
 
 export function SentenceHeatmap({ sentences }: { sentences: SentenceScore[] }) {
   return (
-    <div className="space-y-1.5">
-      <p className="text-xs text-zinc-500 font-medium mb-2">Per-Sentence Heatmap</p>
-      {sentences.map((s, i) => {
+    <div>
+      <p className="text-xs text-zinc-500 font-medium mb-2">
+        Per-Sentence Heatmap{" "}
+        <span className="text-zinc-600">· {sentences.length} sentences</span>
+      </p>
+      {/* Cap height and scroll internally so long documents don't push
+          the surrounding panel off-screen. 50vh matches the rest of the
+          output components (ReplayTimeline, ProvenanceReport). */}
+      <div className="space-y-1.5 max-h-[50vh] overflow-y-auto overscroll-contain pr-1">
+        {sentences.map((s, i) => {
         const score = s.ai_score;
         const bg =
           score === null
@@ -37,6 +44,7 @@ export function SentenceHeatmap({ sentences }: { sentences: SentenceScore[] }) {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

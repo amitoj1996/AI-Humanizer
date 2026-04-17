@@ -52,3 +52,20 @@ textarea:focus {
 .tiptap:focus {
   outline: none;
 }
+
+/* Indeterminate progress bar — used by HumanizeProgress while the
+   pipeline runs. The POST is non-streaming, so we can't show true
+   percent; a looping bar + elapsed counter + stage hints signal that
+   work is happening. Tailwind's arbitrary animation utility references
+   this keyframe by name. */
+@keyframes progressSlide {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(150%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}

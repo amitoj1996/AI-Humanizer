@@ -25,8 +25,14 @@ export function Sidebar() {
   const { loadContent, clearResults } = useAppStore();
   const [creatingProject, setCreatingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
+  // Hydration guard — Next.js SSRs client components, and Zustand state
+  // only exists after mount, so any store-derived attribute renders
+  // differently server-vs-client and React can't patch attributes.
+  // Gating on `mounted` forces both to render the same initial output.
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     loadProjects();
   }, [loadProjects]);
 
@@ -163,7 +169,7 @@ export function Sidebar() {
             <ImportButton />
             <button
               onClick={handleNewDoc}
-              disabled={!currentProjectId}
+              disabled={!mounted || !currentProjectId}
               className="text-xs text-blue-400 hover:text-blue-300 disabled:text-zinc-700 disabled:cursor-not-allowed"
             >
               + New
